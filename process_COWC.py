@@ -6,7 +6,7 @@ import os
 
 process_directories = []
 process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
-process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ_modified")
+process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
 process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Toronto_ISPRS")
 process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Utah_AGRC")
 
@@ -127,6 +127,7 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size):
 
 
 for directory in process_directories:
+    print("current directory:"+directory)
     filelist = os.listdir(directory)
     image_list = []
     image_mask_list = []
@@ -137,5 +138,6 @@ for directory in process_directories:
             image_mask_list.append(os.path.join(directory, root + "_Annotated_Cars.png"))
 
     for image_path, image_mask_path in zip(image_list,image_mask_list):
+        print("processing image:" + image_path)
         make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size)
 

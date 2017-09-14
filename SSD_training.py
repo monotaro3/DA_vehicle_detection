@@ -25,9 +25,12 @@ from chainercv.links.model.ssd import random_crop_with_bbox_constraints
 from chainercv.links.model.ssd import random_distort
 from chainercv.links.model.ssd import resize_with_random_interpolation
 
+import time
+
 #--custom
 from SSD_for_vehicle_detection import SSD512_vd
 from COWC_dataset_processed import COWC_dataset_processed, vehicle_classes
+from utils import gen_dms_time_str
 
 
 class ConcatenatedDataset(chainer.dataset.DatasetMixin):
@@ -136,10 +139,12 @@ def main():
     # parser.add_argument('--resume')
     # args = parser.parse_args()
 
-    batchsize = 1
+    batchsize = 32
     gpu = 0
     out = "result"
     resume = None
+
+    exectime = time.time()
 
     defaultbox_size = {
         0.15: (30.72,51.2,133.12,215.04,296.96,378.88,460.8,542.72),
@@ -225,6 +230,9 @@ def main():
 
     trainer.run()
 
+    exectime = time.time() - exectime
+    exectime_str = gen_dms_time_str(exectime)
+    print("exextime:"+exectime_str)
 
 if __name__ == '__main__':
     main()
