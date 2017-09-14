@@ -51,10 +51,14 @@ class COWC_dataset_processed(chainer.dataset.DatasetMixin):
                 label.append(vehicle_classes.index("car"))
                 line = annotations.readline()
 
+        bbox = np.stack(bbox).astype(np.float32)
+        label = np.stack(label).astype(np.int32)
+
         return img, bbox, label
 
 if __name__ == "__main__":
     a = COWC_dataset_processed("validation")
     print(a.ids)
+    print(type(a.ids))
     img, bbox, label = a[7]
-    pass
+    print((img, bbox, label))
