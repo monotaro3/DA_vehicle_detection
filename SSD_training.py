@@ -28,7 +28,7 @@ from chainercv.links.model.ssd import resize_with_random_interpolation
 import time
 
 #--custom
-from SSD_for_vehicle_detection import SSD512_vd
+from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
 from COWC_dataset_processed import COWC_dataset_processed, vehicle_classes
 from utils import gen_dms_time_str
 
@@ -130,26 +130,35 @@ class Transform(object):
 
 
 def main():
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     '--model', choices=('ssd300', 'ssd512'), default='ssd300')
-    # parser.add_argument('--batchsize', type=int, default=32)
-    # parser.add_argument('--gpu', type=int, default=-1)
-    # parser.add_argument('--out', default='result')
-    # parser.add_argument('--resume')
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--model', choices=('ssd300', 'ssd512'), default='ssd300')
+    parser.add_argument(
+        '--resolution', type=float, choices=(0.15,0.16,0.3), default=0.15)
+    parser.add_argument('--batchsize', type=int, default=32)
+    parser.add_argument('--gpu', type=int, default=-1)
+    parser.add_argument('--out', default='result')
+    parser.add_argument('--resume')
+    parser.add_argument('--resumemodel')
+    parser.add_argument('--datadir')
+    args = parser.parse_args()
 
-    batchsize = 32
+    batchsize = args.batchsize
     gpu = 0
     out = "result"
-    resume = None
+    resume = args.resume
 
     exectime = time.time()
 
-    defaultbox_size = {
+    defaultbox_size_300 = {
+        0.15: (30,48.0,103.5,159,214.5,270,325.5),
+        0.16: (30,48.0,103.5,159,214.5,270,325.5),
+        0.3: (24, 30,90,150,210,270,330),
+    }
+    defaultbox_size_512 = {
         0.15: (30.72,51.2,133.12,215.04,296.96,378.88,460.8,542.72),
         0.16: (30.72,46.08,129.02,211.97,294.91,377.87,460.8,543.74),
-        0.3 : (20.48,25.6,112.64,199.68,286.72,373.76,460.8,547.84),
+        0.3 : (25.6,30.72,116.74,202.75,288.79,374.78,460.8,546.82),
     } #defaultbox size corresponding to the image resolution
 
     # if args.model == 'ssd300':
@@ -162,10 +171,17 @@ def main():
     #     n_fg_class=len(vehicle_classes),
     #     pretrained_model='imagenet')
 
-    model = SSD512_vd(
-        n_fg_class=len(vehicle_classes),
-        pretrained_model='imagenet',defaultbox_size=defaultbox_size[0.15])
+    if args.model == 'ssd300':
+        model = SSD300_vd(
+            n_fg_class=len(vehicle_classes),
+            pretrained_model='imagenet', defaultbox_size=defaultbox_size_300[args.resolution])
+    else:
+        model = SSD512_vd(
+            n_fg_class=len(vehicle_classes),
+            pretrained_model='imagenet',defaultbox_size=defaultbox_size_512[args.resolution])
 
+    # if args.resumemodel:
+    #     serializers.load_npz(resume, model)
 
     model.use_preset('evaluate')
     train_chain = MultiboxTrainChain(model)
@@ -178,14 +194,14 @@ def main():
         #     VOCDetectionDataset(year='2007', split='trainval'),
         #     VOCDetectionDataset(year='2012', split='trainval')
         # ),
-        COWC_dataset_processed(split="train"),
+        COWC_dataset_processed(split="train",datadir=args.datadir),
         Transform(model.coder, model.insize, model.mean))
     train_iter = chainer.iterators.MultiprocessIterator(train, batchsize)
 
     # test = VOCDetectionDataset(
     #     year='2007', split='test',
     #     use_difficult=True, return_difficult=True)
-    test = COWC_dataset_processed("validation")
+    test = COWC_dataset_processed(split="validation",datadir=args.datadir)
     test_iter = chainer.iterators.SerialIterator(
         test, batchsize, repeat=False, shuffle=False)
 
@@ -220,10 +236,10 @@ def main():
         trigger=log_interval)
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
-    trainer.extend(extensions.snapshot(), trigger=(10000, 'iteration'))
+    trainer.extend(extensions.snapshot(), trigger=(1000, 'iteration'))
     trainer.extend(
         extensions.snapshot_object(model, 'model_iter_{.updater.iteration}'),
-        trigger=(120000, 'iteration'))
+        trigger=(1000, 'iteration'))
 
     if resume:
         serializers.load_npz(resume, trainer)

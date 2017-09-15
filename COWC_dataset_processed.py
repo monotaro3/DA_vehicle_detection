@@ -10,8 +10,8 @@ vehicle_classes = (
     "car")
 
 class COWC_dataset_processed(chainer.dataset.DatasetMixin):
-    def __init__(self,split="train"):
-        self.data_dir = "E:/work/vehicle_detection_dataset/cowc_processed"
+    def __init__(self,split="train",datadir ="E:/work/vehicle_detection_dataset/cowc_processed" ):
+        self.data_dir = datadir
         id_list_file = os.path.join(
             self.data_dir, "list/{0}.txt".format(split))
 

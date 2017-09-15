@@ -3,21 +3,38 @@
 import cv2 as cv
 import numpy as np
 import os
+import math
 
 process_directories = []
-process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
-process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
-process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Toronto_ISPRS")
-process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Utah_AGRC")
+# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
+# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
+# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Toronto_ISPRS")
+# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Utah_AGRC")
 
-save_directory = "E:/work/vehicle_detection_dataset/cowc_processed"
+save_directory = ""
 
-cutout_size = 512
+directories_list = "process_COWC_dirs.txt"
+
+dir_lists = [dir_.strip() for dir_ in open(directories_list)]
+for dir_ in dir_lists:
+    record = dir_.split(",")
+    if record[0] == "process" : process_directories.append(record[1])
+    elif record[0] == "save": save_directory = record[1]
+    else:
+        try:
+            raise ValueError("invalid directory specification")
+        except ValueError as e:
+            print(e)
+
+print("process dirs:")
+print(process_directories)
+
+output_size = 300
 windowsize = 50
 adjust_margin = False
 margin = 0
 use_edge = False
-rescale = 0 # 0: no rescaling 0.5 -> halve the resolution
+scale = 0.5 # set None when not using, 0.5 -> halve the resolution
 
 train_img_number = 0
 test_img_number = 0
@@ -57,7 +74,24 @@ def decode_mask2bbox(maskimg):
         bbox.append([xmin,ymin,xmax,ymax])
     return bbox
 
-def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size):
+def scale_img_bbox(img, bbox, output_size):
+    h,w,c = img.shape
+    scale = output_size / h
+    img_ = cv.resize(img,(output_size,output_size))
+    bbox_ = []
+    for b in bbox:
+        xmin = math.floor(b[0] * scale)
+        ymin = math.floor(b[1] * scale)
+        xmax = math.floor(b[2] * scale)
+        ymax = math.floor(b[3] * scale)
+        b_ = [xmin,ymin,xmax,ymax]
+        for i in range(len(b_)):
+            if b_[i] == 0: b_[i] = 1
+            if b_[i] > output_size: b_[i] = output_size
+        bbox_.append(b_)
+    return img_, bbox_
+
+def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output):
     image = cv.imread(image_path)
     image_mask = cv.imread(image_mask_path)
     height, width, channel = image.shape
@@ -114,6 +148,9 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size):
                             filename = '{0:010d}.png'.format(img_number)
                             filename_annotation = '{0:010d}.txt'.format(img_number)
 
+                            if cutout_size != size_output:
+                                cutout_, bbox = scale_img_bbox(cutout_, bbox, size_output)
+
                             cv.imwrite(os.path.join(save_directory,usage,filename),cutout_)
                             with open(os.path.join(save_directory,usage,filename_annotation), 'w') as bbox_text:
                                 for b in bbox:
@@ -125,6 +162,8 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size):
                                 with open(test_imglist_text,'a') as test_list:
                                     test_list.write('{0:010d}'.format(img_number)+"\n")
 
+
+cutout_size = math.floor(output_size / scale) if scale != None else output_size
 
 for directory in process_directories:
     print("current directory:"+directory)
@@ -139,5 +178,5 @@ for directory in process_directories:
 
     for image_path, image_mask_path in zip(image_list,image_mask_list):
         print("processing image:" + image_path)
-        make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size)
+        make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size)
 
