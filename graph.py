@@ -22,7 +22,7 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png"):
     plt.title("Training loss")
     plt.ylabel("Loss")
     plt.xlabel("Iteration")
-    plt.ylim([0,0.1])
+    plt.ylim([0,0.5])
     plt.plot(itr, loss, label="Loss")
     plt.plot(itr, loss_loc, label="Loss_loc")
     plt.plot(itr, loss_conf, label="Loss_conf")
@@ -32,5 +32,5 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png"):
     # plt.show()
 
 if __name__ == "__main__":
-    gengraph("log_300_0.16",figname="train_log_300_0.16.png")
+    gengraph("log",figname="train_log_300_0.3.png")
 

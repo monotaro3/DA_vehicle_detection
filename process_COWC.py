@@ -29,12 +29,12 @@ for dir_ in dir_lists:
 print("process dirs:")
 print(process_directories)
 
-output_size = 300
+output_size = 1500
 windowsize = 50
 adjust_margin = False
 margin = 0
 use_edge = False
-scale = 0.5 # set None when not using, 0.5 -> halve the resolution
+scale = 0.9375 # set None when not using, 0.5 -> halve the resolution
 
 train_img_number = 0
 test_img_number = 0
