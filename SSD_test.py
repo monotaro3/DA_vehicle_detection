@@ -4,6 +4,7 @@ import matplotlib.pyplot as plot
 from chainer import serializers
 from chainercv import utils
 import math
+import os
 import numpy as np
 from chainercv.visualizations import vis_bbox
 from eval_detection_voc_custom import eval_detection_voc_custom
@@ -70,9 +71,35 @@ def ssd_predict(model, image, margin,nms_thresh = 0.45):
 
     return bbox, label, score
 
-def main(ssd_path,imagepath,modelsize="ssd300",resolution=0.16):
+def main(ssd_path,imagepath,modelsize="ssd300",resolution=0.16,procDir=False,testonly = False,resultdir = "result"):
     margin = 50
     gpu = 0
+
+    images = []
+    gt_files = []
+
+    if not os.path.isdir(resultdir):
+        os.makedirs(resultdir)
+
+    if procDir:
+        if not os.path.isdir(imagepath):
+            try:
+                raise(ValueError("invalid directory path"))
+            except ValueError as e:
+                print(e)
+                return
+        files = os.listdir(imagepath)
+        for f in files:
+            root, ext = os.path.splitext(f)
+            if ext == ".tif":
+                images.append(os.path.join(imagepath,f))
+                if not testonly:
+                    gt_files.append(os.path.join(imagepath,root+".txt"))
+    else:
+        images.append(imagepath)
+        if not testonly:
+            root, ext = os.path.splitext(imagepath)
+            gt_files.append(root + ".txt")
 
     if modelsize == 'ssd300':
         model = SSD300_vd(
@@ -84,32 +111,62 @@ def main(ssd_path,imagepath,modelsize="ssd300",resolution=0.16):
             defaultbox_size=defaultbox_size_512[resolution])
 
     serializers.load_npz(ssd_path, model)
-    image = utils.read_image(imagepath, color=True)
-
     if gpu >= 0: model.to_gpu()
 
-    bbox, label, score = ssd_predict(model,image,margin)
-
-    gt_bbox = make_bboxeslist_chainercv("E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.txt")
-    gt_label = np.stack([0]*len(gt_bbox)).astype(np.int32)
-
-    result, stats, matches = eval_detection_voc_custom([bbox],[label],[score],[gt_bbox],[gt_label])
+    #predict
+    bboxes = []
+    labels = []
+    scores = []
+    gt_bboxes = []
+    gt_labels = []
+    for i in range(len(images)):
+        image = utils.read_image(images[i], color=True)
+        bbox, label, score = ssd_predict(model,image,margin)
+        bboxes.append(bbox)
+        labels.append(label)
+        scores.append(score)
+        if not testonly:
+            gt_bbox = make_bboxeslist_chainercv(gt_files[i])
+            gt_bboxes.append(gt_bbox)
+            # labels are without background, i.e. class_labels.index(class). So in this case 0 means cars
+            gt_labels.append(np.stack([0]*len(gt_bbox)).astype(np.int32))
+    if not testonly:
+        result, stats, matches = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
 
     #visualizations
-    vis_bbox(
-        image, bbox, label, score, label_names=vehicle_classes)
-    #plot.show()
-    plot.savefig("result/vis1.png")
+    for imagepath , bbox, label, score in zip(images,bboxes,labels,scores):
+        dir, imagename = os.path.split(imagepath)
+        result_name, ext = os.path.splitext(imagename)
+        image = utils.read_image(imagepath, color=True)
+        vis_bbox(
+            image, bbox, label, score, label_names=vehicle_classes)
+        #plot.show()
+        plot.savefig(os.path.join(resultdir,result_name+ "_vis1.png"))
 
-    image_ = image.copy()
-    image_ = image_.transpose(1,2,0)
-    image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
-    draw_rect(image_,bbox,matches[0])
-    cv.imwrite("result/vis2.png",image_)
+        #result
+        image_ = image.copy()
+        image_ = image_.transpose(1,2,0)
+        image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
+        if testonly:
+            draw_rect(image_, bbox, np.array((1,) * bbox.shape[0], dtype=np.int8))
+        else:
+            draw_rect(image_,bbox,matches[images.index(imagepath)])
+        cv.imwrite(os.path.join(resultdir,result_name+ "_vis2.png"),image_)
+
+        #gt visualization
+        image_ = image.copy()
+        image_ = image_.transpose(1, 2, 0)
+        image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
+        gt_bbox = gt_bboxes[images.index(imagepath)]
+        draw_rect(image_, gt_bbox, np.array((0,) * gt_bbox.shape[0],dtype=np.int8))
+        cv.imwrite(os.path.join(resultdir,result_name+ "_vis_gt.png"), image_)
+
+    print(result)
+    print(stats)
 
 if __name__ == "__main__":
-    imagepath = "E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
+    imagepath = "c:/work/DA_images/NTT"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
     modelpath = "model/ssd_300_0.16_120000"
-    main(modelpath,imagepath)
+    main(modelpath,imagepath,procDir=True,resultdir="result/NTT",resolution=0.16,modelsize="ssd300")
 
 
