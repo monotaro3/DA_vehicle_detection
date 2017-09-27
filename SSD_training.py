@@ -247,6 +247,9 @@ def main():
     if resume:
         serializers.load_npz(resume, trainer)
 
+    # serializers.load_npz("model/snapshot_iter_30000", trainer)
+    # serializers.save_npz("model/ssd_300_0.3_30000",trainer.updater._optimizers["main"].target.model)
+
     trainer.run()
 
     exectime = time.time() - exectime
