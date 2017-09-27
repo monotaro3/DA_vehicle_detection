@@ -4,6 +4,7 @@ import cv2 as cv
 import numpy as np
 import os
 import math
+from utils import decode_mask2bbox
 
 process_directories = []
 # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
@@ -29,12 +30,12 @@ for dir_ in dir_lists:
 print("process dirs:")
 print(process_directories)
 
-output_size = 1500
+output_size = 300
 windowsize = 50
 adjust_margin = False
 margin = 0
 use_edge = False
-scale = 0.9375 # set None when not using, 0.5 -> halve the resolution
+scale = 0.5 # set None when not using, 0.5 -> halve the resolution
 
 train_img_number = 0
 test_img_number = 0
@@ -49,30 +50,7 @@ if not os.path.isdir(os.path.join(save_directory, "validation")):
 if not os.path.isdir(os.path.join(save_directory, "list")):
     os.makedirs(os.path.join(save_directory, "list"))
 
-def decode_mask2bbox(maskimg):
-    global windowsize
-    rp = np.where(maskimg == 255)
-    h,w,c = maskimg.shape
-    dots_ = []
-    dot_num = rp[0].size
-    for i in range(dot_num):
-        dots_.append([rp[0][i]+1, rp[1][i]+1])
-    bbox = []
-    window_half = int(windowsize / 2)
-    for d in dots_:
-        xmin = d[1] - window_half
-        ymin = d[0] - window_half
-        xmax = d[1] + window_half
-        ymax = d[0] + window_half
-        if windowsize % 2 == 0:
-            xmin +=1
-            ymin +=1
-            if xmin < 1: xmin = 1
-            if ymin < 1: ymin = 1
-            if xmax > w: xmax = w
-            if ymax > h: ymax = h
-        bbox.append([xmin,ymin,xmax,ymax])
-    return bbox
+
 
 def scale_img_bbox(img, bbox, output_size):
     h,w,c = img.shape
@@ -91,7 +69,7 @@ def scale_img_bbox(img, bbox, output_size):
         bbox_.append(b_)
     return img_, bbox_
 
-def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output):
+def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize):
     image = cv.imread(image_path)
     image_mask = cv.imread(image_mask_path)
     height, width, channel = image.shape
@@ -134,7 +112,7 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                             write_flag = True
                     if write_flag:
                         write_flag = False
-                        bbox = decode_mask2bbox(cutout_mask_)
+                        bbox = decode_mask2bbox(cutout_mask_,windowsize)
                         if len(bbox) > 0:
                             all_img_number += 1
                             if all_img_number % 4 != 0:
@@ -178,5 +156,5 @@ for directory in process_directories:
 
     for image_path, image_mask_path in zip(image_list,image_mask_list):
         print("processing image:" + image_path)
-        make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size)
+        make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize)
 
