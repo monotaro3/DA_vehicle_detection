@@ -5,6 +5,7 @@ import numpy as np
 import os
 import chainer
 from chainercv.utils import read_image
+import pickle
 
 vehicle_classes = (
     "car")
@@ -56,9 +57,50 @@ class COWC_dataset_processed(chainer.dataset.DatasetMixin):
 
         return img, bbox, label
 
+class COWC_fmap_set(chainer.dataset.DatasetMixin):
+    def __init__(self,datadir, split="train"):
+        self.data_dir = datadir
+        id_list_file = os.path.join(
+            self.data_dir, "list/{0}.txt".format(split))
+
+        self.ids = [id_.strip() for id_ in open(id_list_file)]
+        self.split = split
+
+    def __len__(self):
+        return len(self.ids)
+
+    def get_example(self, i):
+        id_ = self.ids[i]
+        fmp_file = os.path.join(self.data_dir,self.split,"{0}.fmp".format(id_))
+        with open(fmp_file,"rb") as f:
+            fmap = pickle.load(f)
+        return fmap
+
+class Dataset_imgonly(chainer.dataset.DatasetMixin):
+    def __init__(self,datadir, split="train"):
+        self.data_dir = datadir
+        id_list_file = os.path.join(
+            self.data_dir, "list/{0}.txt".format(split))
+
+        self.ids = [id_.strip() for id_ in open(id_list_file)]
+        self.split = split
+
+    def __len__(self):
+        return len(self.ids)
+
+    def get_example(self, i):
+        id_ = self.ids[i]
+        imgfile = os.path.join(self.data_dir,self.split,"{0}.tif".format(id_))
+        img = read_image(imgfile, color=True)
+        return img
+
+
 if __name__ == "__main__":
-    a = COWC_dataset_processed("validation")
-    print(a.ids)
-    print(type(a.ids))
-    img, bbox, label = a[7]
-    print((img, bbox, label))
+    # a = COWC_dataset_processed("validation")
+    # print(a.ids)
+    # print(type(a.ids))
+    # img, bbox, label = a[7]
+    # print((img, bbox, label))
+    a = Dataset_imgonly("E:/work/vehicle_detection_dataset/test_out")
+    example = a[1]
+    pass
