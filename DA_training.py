@@ -9,7 +9,8 @@ from chainer.training import extensions
 from chainer import serializers
 from chainercv.links.model.ssd import VGG16Extractor300
 
-from SSD_for_vehicle_detection import Discriminator
+from SSD_for_vehicle_detection import ADDA_Discriminator, ADDA_Discriminator2
+from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -25,15 +26,15 @@ def make_optimizer(model, alpha, beta1, beta2):
 
 def main():
     parser = argparse.ArgumentParser(description='Train script')
-    parser.add_argument('--algorithm', '-a', type=str, default="dcgan", help='GAN algorithm')
-    parser.add_argument('--architecture', type=str, default="dcgan", help='Network architecture')
+    #parser.add_argument('--algorithm', '-a', type=str, default="dcgan", help='GAN algorithm')
+    #parser.add_argument('--architecture', type=str, default="dcgan", help='Network architecture')
     parser.add_argument('--batchsize', type=int, default=64)
     parser.add_argument('--max_iter', type=int, default=100000)
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result', help='Directory to output the result')
     parser.add_argument('--snapshot_interval', type=int, default=10000, help='Interval of snapshot')
     parser.add_argument('--evaluation_interval', type=int, default=10000, help='Interval of evaluation')
-    parser.add_argument('--display_interval', type=int, default=100, help='Interval of displaying log to console')
+    parser.add_argument('--display_interval', type=int, default=10, help='Interval of displaying log to console')
     parser.add_argument('--n_dis', type=int, default=5, help='number of discriminator update per generator update')
     parser.add_argument('--gamma', type=float, default=0.5, help='hyperparameter gamma')
     parser.add_argument('--lam', type=float, default=10, help='gradient penalty')
@@ -42,22 +43,26 @@ def main():
     parser.add_argument('--adam_beta2', type=float, default=0.9, help='beta2 in Adam optimizer')
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
+    parser.add_argument('--adda_model', help='adda class name to be used')
+
 
     args = parser.parse_args()
-    report_keys = ["loss_dis", "loss_gen"]
+    report_keys = ["loss_t_enc", "loss_dis"]
 
     # Set up dataset
-    inplement my own dataset
-    source_dataset
-    target_dataset
-    train_iter1 = chainer.iterators.SerialIterator(source_dataset, args.batchsize)
-    train_iter2 = chainer.iterators.SerialIterator(target_dataset, args.batchsize)
+
+    source_dataset = COWC_fmap_set("E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap")
+    target_dataset = Dataset_imgonly("E:/work/vehicle_detection_dataset/Khartoum_adda")
+    # train_iter1 = chainer.iterators.SerialIterator(source_dataset, args.batchsize)
+    # train_iter2 = chainer.iterators.SerialIterator(target_dataset, args.batchsize)
+    train_iter1 = chainer.iterators.MultiprocessIterator(source_dataset, args.batchsize)
+    train_iter2 = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
 
     # Setup algorithm specific networks and updaters
     models = []
     opts = {}
     updater_args = {
-        "iterator": {'source': train_iter1,'target': train_iter2,},
+        "iterator": {'main': train_iter1,'target': train_iter2,},
         "device": args.gpu
     }
 
@@ -69,6 +74,7 @@ def main():
     #     else:
     #         raise NotImplementedError()
     from DA_updater import Updater
+    Discriminator = eval(args.adda_model)#ADDA_Discriminator2 #choose discriminator type
     discriminator = Discriminator()
     target_encoder = VGG16Extractor300()
     serializers.load_npz(args.initencoder, target_encoder)
@@ -81,8 +87,8 @@ def main():
             m.to_gpu()
 
     # Set up optimizers
-    opts["opt_gen"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
-    opts["opt_dis"] = make_optimizer(target_encoder, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    opts["opt_t_enc"] = make_optimizer(target_encoder, args.adam_alpha, args.adam_beta1, args.adam_beta2)
 
     updater_args["optimizer"] = opts
     updater_args["models"] = models
