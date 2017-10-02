@@ -8,7 +8,7 @@ from chainercv.utils import read_image
 import pickle
 
 vehicle_classes = (
-    "car")
+    "car",)  # This must be tuple!!
 
 class COWC_dataset_processed(chainer.dataset.DatasetMixin):
     def __init__(self,split="train",datadir ="E:/work/vehicle_detection_dataset/cowc_processed" ):
