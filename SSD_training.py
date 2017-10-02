@@ -152,6 +152,7 @@ def main():
     parser.add_argument('--resume')
     parser.add_argument('--resumemodel')
     parser.add_argument('--datadir')
+    parser.add_argument('--weightdecay', type=float,  default=0.0005)
     args = parser.parse_args()
 
     batchsize = args.batchsize
@@ -215,7 +216,7 @@ def main():
         if param.name == 'b':
             param.update_rule.add_hook(GradientScaling(2))
         else:
-            param.update_rule.add_hook(WeightDecay(0.0005))
+            param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
     updater = training.StandardUpdater(train_iter, optimizer, device=gpu)
     trainer = training.Trainer(updater, (120000, 'iteration'), out)
