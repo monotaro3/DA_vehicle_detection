@@ -44,6 +44,8 @@ def main():
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
     parser.add_argument('--adda_model', help='adda class name to be used')
+    parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
+    parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
 
 
     args = parser.parse_args()
@@ -51,8 +53,8 @@ def main():
 
     # Set up dataset
 
-    source_dataset = COWC_fmap_set("E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap")
-    target_dataset = Dataset_imgonly("E:/work/vehicle_detection_dataset/Khartoum_adda")
+    source_dataset = COWC_fmap_set(args.source_dataset)
+    target_dataset = Dataset_imgonly(args.target_dataset)
     # train_iter1 = chainer.iterators.SerialIterator(source_dataset, args.batchsize)
     # train_iter2 = chainer.iterators.SerialIterator(target_dataset, args.batchsize)
     train_iter1 = chainer.iterators.MultiprocessIterator(source_dataset, args.batchsize)
