@@ -1,7 +1,7 @@
 # coding: utf-8
 
 import numpy as np
-from osgeo import gdal, osr
+#from osgeo import gdal, osr
 from chainer import serializers
 import os
 from chainercv import utils as utils_chainercv
@@ -39,6 +39,7 @@ def make_bboxeslist_chainercv(gt_file):
     return bboxes
 
 def convertDepth(input,output):
+    from osgeo import gdal, osr
     gdal.AllRegister()
     src = gdal.Open(input)
     SpaRef = src.GetProjection()
