@@ -36,10 +36,11 @@ adjust_margin = False
 margin = 0
 use_edge = False
 scale = 0.5 # set None when not using, 0.5 -> halve the resolution
+rotate = False
 
 train_img_number = 0
 test_img_number = 0
-all_img_number = 0
+all_img_number_unique = 0
 train_imglist_text = os.path.join(save_directory,"list","train.txt")
 test_imglist_text = os.path.join(save_directory,"list","validation.txt")
 
@@ -69,7 +70,7 @@ def scale_img_bbox(img, bbox, output_size):
         bbox_.append(b_)
     return img_, bbox_
 
-def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize):
+def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize,rotate):
     image = cv.imread(image_path)
     image_mask = cv.imread(image_mask_path)
     height, width, channel = image.shape
@@ -79,11 +80,12 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
     write_flag = False
     global train_img_number
     global test_img_number
-    global all_img_number
+    global all_img_number_unique
     global train_imglist_text
     global test_imglist_text
     global adjust_margin
     global margin
+    n_angles = 4 if rotate else 1
     if not adjust_margin:
         W_slot = int((width-margin)/(cutout_size-margin))
         H_slot = int((height-margin)/(cutout_size-margin))
@@ -113,32 +115,41 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                     if write_flag:
                         write_flag = False
                         bbox = decode_mask2bbox(cutout_mask_,windowsize)
-                        if len(bbox) > 0:
-                            all_img_number += 1
-                            if all_img_number % 4 != 0:
+                        if len(bbox) > 0:  #omit if there is no car
+                            all_img_number_unique += 1
+                            if all_img_number_unique % 4 != 0:
                                 usage = "train"
-                                train_img_number += 1
+                                train_img_number += n_angles
                                 img_number = train_img_number
                             else:
                                 usage = "validation"
-                                test_img_number += 1
+                                test_img_number += n_angles
                                 img_number = test_img_number
-                            filename = '{0:010d}.png'.format(img_number)
-                            filename_annotation = '{0:010d}.txt'.format(img_number)
 
-                            if cutout_size != size_output:
-                                cutout_, bbox = scale_img_bbox(cutout_, bbox, size_output)
+                            center = (int(cutout_size/2),int(cutout_size/2))
 
-                            cv.imwrite(os.path.join(save_directory,usage,filename),cutout_)
-                            with open(os.path.join(save_directory,usage,filename_annotation), 'w') as bbox_text:
-                                for b in bbox:
-                                    bbox_text.write(",".join(map(str, b))+"\n")
-                            if usage == "train":
-                                with open(train_imglist_text,'a') as train_list:
-                                    train_list.write('{0:010d}'.format(img_number)+"\n")
-                            else:
-                                with open(test_imglist_text,'a') as test_list:
-                                    test_list.write('{0:010d}'.format(img_number)+"\n")
+                            for i in range(img_number-n_angles+1,img_number+1):
+                                filename = '{0:010d}.png'.format(i)
+                                filename_annotation = '{0:010d}.txt'.format(i)
+                                angle = (i+n_angles-1-img_number)*90.0
+                                rmat = cv.getRotationMatrix2D(center, angle, 1.0)
+                                cutout = cv.warpAffine(cutout_, rmat, (cutout_size,cutout_size))
+                                cutout_mask = cv.warpAffine(cutout_mask_, rmat, (cutout_size, cutout_size))
+                                bbox = decode_mask2bbox(cutout_mask, windowsize)
+
+                                if cutout_size != size_output:
+                                    cutout, bbox = scale_img_bbox(cutout, bbox, size_output)
+
+                                cv.imwrite(os.path.join(save_directory,usage,filename),cutout)
+                                with open(os.path.join(save_directory,usage,filename_annotation), 'w') as bbox_text:
+                                    for b in bbox:
+                                        bbox_text.write(",".join(map(str, b))+"\n")
+                                if usage == "train":
+                                    with open(train_imglist_text,'a') as train_list:
+                                        train_list.write('{0:010d}'.format(i)+"\n")
+                                else:
+                                    with open(test_imglist_text,'a') as test_list:
+                                        test_list.write('{0:010d}'.format(i)+"\n")
 
 
 cutout_size = math.floor(output_size / scale) if scale != None else output_size
@@ -146,6 +157,7 @@ cutout_size = math.floor(output_size / scale) if scale != None else output_size
 for directory in process_directories:
     print("current directory:"+directory)
     filelist = os.listdir(directory)
+    filelist.sort()
     image_list = []
     image_mask_list = []
     for file in filelist:
@@ -156,5 +168,5 @@ for directory in process_directories:
 
     for image_path, image_mask_path in zip(image_list,image_mask_list):
         print("processing image:" + image_path)
-        make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize)
+        make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize,rotate)
 
