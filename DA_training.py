@@ -9,7 +9,8 @@ from chainer.training import extensions
 from chainer import serializers
 from chainercv.links.model.ssd import VGG16Extractor300
 
-from SSD_for_vehicle_detection import ADDA_Discriminator, ADDA_Discriminator2
+from SSD_for_vehicle_detection import *
+from DA_updater import *
 from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly
 
 sys.path.append(os.path.dirname(__file__))
@@ -28,10 +29,10 @@ def main():
     parser = argparse.ArgumentParser(description='Train script')
     #parser.add_argument('--algorithm', '-a', type=str, default="dcgan", help='GAN algorithm')
     #parser.add_argument('--architecture', type=str, default="dcgan", help='Network architecture')
-    parser.add_argument('--batchsize', type=int, default=64)
-    parser.add_argument('--max_iter', type=int, default=100000)
+    parser.add_argument('--batchsize', type=int, default=1)
+    parser.add_argument('--max_iter', type=int, default=10)
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU ID (negative value indicates CPU)')
-    parser.add_argument('--out', '-o', default='result', help='Directory to output the result')
+    parser.add_argument('--out', '-o', default='result/addatest', help='Directory to output the result')
     parser.add_argument('--snapshot_interval', type=int, default=10000, help='Interval of snapshot')
     parser.add_argument('--evaluation_interval', type=int, default=10000, help='Interval of evaluation')
     parser.add_argument('--display_interval', type=int, default=10, help='Interval of displaying log to console')
@@ -43,7 +44,8 @@ def main():
     parser.add_argument('--adam_beta2', type=float, default=0.9, help='beta2 in Adam optimizer')
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
-    parser.add_argument('--adda_model', help='adda class name to be used')
+    parser.add_argument('--adda_model', type = str, default= "ADDA_Discriminator4", help='adda class name to be used')
+    parser.add_argument('--updater', type=str, default="Updater1", help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
 
@@ -75,7 +77,8 @@ def main():
     #         discriminator = common.net.DCGANDiscriminator()
     #     else:
     #         raise NotImplementedError()
-    from DA_updater import Updater
+
+    Updater = eval(args.updater) #Updater1
     Discriminator = eval(args.adda_model)#ADDA_Discriminator2 #choose discriminator type
     discriminator = Discriminator()
     target_encoder = VGG16Extractor300()
