@@ -36,7 +36,7 @@ adjust_margin = False
 margin = 0
 use_edge = False
 scale = 0.5 # set None when not using, 0.5 -> halve the resolution
-rotate = False
+rotate = True
 
 train_img_number = 0
 test_img_number = 0
@@ -69,6 +69,26 @@ def scale_img_bbox(img, bbox, output_size):
             if b_[i] > output_size: b_[i] = output_size
         bbox_.append(b_)
     return img_, bbox_
+
+def rotateBbox(bbox_, degree, imgshape): #imgshape(np.array):(W,H)
+    center = imgshape/2
+    bbox = []
+    rad = np.radians(-degree)  #axis y is reversed
+    rMat = np.matrix([[np.cos(rad),-np.sin(rad)],[np.sin(rad),np.cos(rad)]])
+    for b in bbox_:
+        b_center = np.array(((b[0] + b[2])/2,(b[1] + b[3])/2))
+        b_size_half = (b[2] - b[0]+1 + b[3] - b[1]+1)/4
+        b_center = b_center - center
+        b_center = np.array((rMat*(b_center[np.newaxis,:].T)).T)[0] + center
+        p_min = np.round(b_center - b_size_half)
+        p_min[p_min <= 0] = 1
+        p_max = np.round(b_center + b_size_half)
+        mask = p_max > imgshape
+        p_max[mask] = imgshape[mask]
+        b_ = np.hstack((p_min,p_max))
+        bbox.append(b_.tolist())
+    return bbox
+
 
 def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize,rotate):
     image = cv.imread(image_path)
@@ -114,8 +134,8 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                             write_flag = True
                     if write_flag:
                         write_flag = False
-                        bbox = decode_mask2bbox(cutout_mask_,windowsize)
-                        if len(bbox) > 0:  #omit if there is no car
+                        bbox_ = decode_mask2bbox(cutout_mask_,windowsize)
+                        if len(bbox_) > 0:  #omit if there is no car
                             all_img_number_unique += 1
                             if all_img_number_unique % 4 != 0:
                                 usage = "train"
@@ -132,10 +152,15 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                                 filename = '{0:010d}.png'.format(i)
                                 filename_annotation = '{0:010d}.txt'.format(i)
                                 angle = (i+n_angles-1-img_number)*90.0
-                                rmat = cv.getRotationMatrix2D(center, angle, 1.0)
-                                cutout = cv.warpAffine(cutout_, rmat, (cutout_size,cutout_size))
-                                cutout_mask = cv.warpAffine(cutout_mask_, rmat, (cutout_size, cutout_size))
-                                bbox = decode_mask2bbox(cutout_mask, windowsize)
+                                if angle != 0:
+                                    rmat = cv.getRotationMatrix2D(center, angle, 1.0)
+                                    cutout = cv.warpAffine(cutout_, rmat, (cutout_size,cutout_size))
+                                    #cutout_mask = cv.warpAffine(cutout_mask_, rmat, (cutout_size, cutout_size))
+                                    #bbox = decode_mask2bbox(cutout_mask, windowsize)
+                                    bbox = rotateBbox(bbox_,angle,np.roll(cutout.shape[0:2],1))
+                                else:
+                                    cutout = cutout_.copy()
+                                    bbox = bbox_.copy()
 
                                 if cutout_size != size_output:
                                     cutout, bbox = scale_img_bbox(cutout, bbox, size_output)
