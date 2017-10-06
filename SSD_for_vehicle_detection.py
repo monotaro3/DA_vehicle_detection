@@ -152,4 +152,55 @@ class ADDA_Discriminator2(Chain):
         h += x[5]
         return self.l(h)
 
+class ADDA_Discriminator3(Chain):
+    def __init__(self, wscale=0.02):
+        w = chainer.initializers.Normal(wscale)
+        super(ADDA_Discriminator3, self).__init__()
+        init = {
+            'initialW': initializers.LeCunUniform(),
+            'initial_bias': initializers.Zero(),
+        }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(512, 8)
+            self.conv2 = L.Convolution2D(512, 8)
+            self.conv3 = L.Convolution2D(512, 8)
+            self.conv4 = L.Convolution2D(512, 8)
+            self.conv5 = L.Convolution2D(512, 8)
+            self.conv6 = L.Convolution2D(256, 3)
+            self.l = L.Linear(256, 1, initialW=w)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.conv1(x[0]))
+        h = F.leaky_relu(self.conv2(h))
+        h = F.leaky_relu(self.conv3(h))
+        h = F.leaky_relu(self.conv4(h))
+        h = F.leaky_relu(self.conv5(h))
+        h = F.leaky_relu(self.conv6(h))
+        h = F.leaky_relu(self.l(h))
+        return h
+
+class ADDA_Discriminator4(Chain):
+    def __init__(self, wscale=0.02):
+        w = chainer.initializers.Normal(wscale)
+        super(ADDA_Discriminator4, self).__init__()
+        init = {
+            'initialW': initializers.LeCunUniform(),
+            'initial_bias': initializers.Zero(),
+        }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(512, 7)
+            self.conv2 = L.Convolution2D(512, 7)
+            self.conv3 = L.Convolution2D(256, 5)
+            self.l = L.Linear(256, 1, initialW=w)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.conv1(x[0]))
+        h = F.max_pooling_2d(h,2)
+        h = F.leaky_relu(self.conv2(h))
+        h = F.max_pooling_2d(h, 2)
+        h = F.leaky_relu(self.conv3(h))
+        h = F.max_pooling_2d(h, 2)
+        h = F.leaky_relu(self.l(h))
+        return h
+
 
