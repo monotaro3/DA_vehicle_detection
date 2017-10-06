@@ -33,7 +33,7 @@ print(process_directories)
 output_size = 300
 windowsize = 50
 adjust_margin = False
-margin = 0
+margin = 100
 use_edge = False
 scale = 0.5 # set None when not using, 0.5 -> halve the resolution
 rotate = True
@@ -50,8 +50,6 @@ if not os.path.isdir(os.path.join(save_directory, "validation")):
     os.makedirs(os.path.join(save_directory, "validation"))
 if not os.path.isdir(os.path.join(save_directory, "list")):
     os.makedirs(os.path.join(save_directory, "list"))
-
-
 
 def scale_img_bbox(img, bbox, output_size):
     h,w,c = img.shape
@@ -70,22 +68,25 @@ def scale_img_bbox(img, bbox, output_size):
         bbox_.append(b_)
     return img_, bbox_
 
-def rotateBbox(bbox_, degree, imgshape): #imgshape(np.array):(W,H)
+def rotateBbox(bbox_, bboxsize, degree, imgshape): #imgshape(np.array):(W,H)
     center = imgshape/2
     bbox = []
     rad = np.radians(-degree)  #axis y is reversed
     rMat = np.matrix([[np.cos(rad),-np.sin(rad)],[np.sin(rad),np.cos(rad)]])
     for b in bbox_:
         b_center = np.array(((b[0] + b[2])/2,(b[1] + b[3])/2))
-        b_size_half = (b[2] - b[0]+1 + b[3] - b[1]+1)/4
+        #b_size_half = (b[2] - b[0]+1 + b[3] - b[1]+1)/4
+        b_size_half = bboxsize/2
         b_center = b_center - center
         b_center = np.array((rMat*(b_center[np.newaxis,:].T)).T)[0] + center
         p_min = np.round(b_center - b_size_half)
+        if (p_min >= imgshape).any(): continue
         p_min[p_min <= 0] = 1
         p_max = np.round(b_center + b_size_half)
+        if (p_max <= 1).any(): continue
         mask = p_max > imgshape
         p_max[mask] = imgshape[mask]
-        b_ = np.hstack((p_min,p_max))
+        b_ = np.hstack((p_min,p_max)).astype(np.int32)
         bbox.append(b_.tolist())
     return bbox
 
@@ -119,18 +120,18 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                                 cutout_mask_ = image_mask[-cutout_size:, -cutout_size:, :]
                                 write_flag = True
                             else:
-                                cutout_ = image[-cutout_size:, (cutout_size-margin)*W:cutout_size*(W+1)+margin, :]
-                                cutout_mask_ = image_mask[-cutout_size:, (cutout_size-margin)*W:cutout_size*(W+1)+margin, :]
+                                cutout_ = image[-cutout_size:, (cutout_size-margin)*W:(cutout_size-margin)*(W+1)+margin, :]
+                                cutout_mask_ = image_mask[-cutout_size:, (cutout_size-margin)*W:(cutout_size-margin)*(W+1)+margin, :]
                                 write_flag = True
                     else:
                         if W == W_slot:
                             if use_edge:
-                                cutout_ = image[(cutout_size-margin)*H:cutout_size*(H+1)+margin, -cutout_size:, :]
-                                cutout_mask_ = image_mask[(cutout_size-margin)*H:cutout_size*(H+1)+margin, -cutout_size:, :]
+                                cutout_ = image[(cutout_size-margin)*H:(cutout_size-margin)*(H+1)+margin, -cutout_size:, :]
+                                cutout_mask_ = image_mask[(cutout_size-margin)*H:(cutout_size-margin)*(H+1)+margin, -cutout_size:, :]
                                 write_flag = True
                         else:
-                            cutout_ = image[(cutout_size-margin)*H:cutout_size*(H+1)+margin,  (cutout_size-margin)*W:cutout_size*(W+1)+margin, :]
-                            cutout_mask_ = image_mask[(cutout_size-margin)*H:cutout_size*(H+1)+margin,  (cutout_size-margin)*W:cutout_size*(W+1)+margin, :]
+                            cutout_ = image[(cutout_size-margin)*H:(cutout_size-margin)*(H+1)+margin,  (cutout_size-margin)*W:(cutout_size-margin)*(W+1)+margin, :]
+                            cutout_mask_ = image_mask[(cutout_size-margin)*H:(cutout_size-margin)*(H+1)+margin,  (cutout_size-margin)*W:(cutout_size-margin)*(W+1)+margin, :]
                             write_flag = True
                     if write_flag:
                         write_flag = False
@@ -157,7 +158,7 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                                     cutout = cv.warpAffine(cutout_, rmat, (cutout_size,cutout_size))
                                     #cutout_mask = cv.warpAffine(cutout_mask_, rmat, (cutout_size, cutout_size))
                                     #bbox = decode_mask2bbox(cutout_mask, windowsize)
-                                    bbox = rotateBbox(bbox_,angle,np.roll(cutout.shape[0:2],1))
+                                    bbox = rotateBbox(bbox_,windowsize,angle,np.roll(cutout.shape[0:2],1))
                                 else:
                                     cutout = cutout_.copy()
                                     bbox = bbox_.copy()
