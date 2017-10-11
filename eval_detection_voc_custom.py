@@ -145,10 +145,16 @@ def calc_detection_voc_prec_rec(
     match = defaultdict(list)
     match_ordered = list()
 
+    #debug code
+    num_example = 0
+
     for pred_bbox, pred_label, pred_score, gt_bbox, gt_label, gt_difficult in \
         six.moves.zip(
             pred_bboxes, pred_labels, pred_scores,
             gt_bboxes, gt_labels, gt_difficults):
+
+        num_example += 1
+        if num_example % 100 == 0: print("current example index:%d" % num_example )
 
         if gt_difficult is None:
             gt_difficult = np.zeros(gt_bbox.shape[0], dtype=bool)
@@ -242,7 +248,11 @@ def calc_detection_voc_prec_rec(
 
     stats = [None] * len(prec)
     for i in range(len(stats)):
-        stats[i] = {"PR": prec[i][-1], "RR": rec[i][-1], "FAR":(1/prec[i][-1] -1) * rec[i][-1] ,"F1":2*prec[i][-1]*rec[i][-1]/(prec[i][-1]+rec[i][-1])}
+        if len(prec[i]) != 0:
+            stats[i] = {"PR": prec[i][-1], "RR": rec[i][-1], "FAR":(1/prec[i][-1] -1) * rec[i][-1] if prec[i][-1] != 0 else None,\
+                    "F1":2*prec[i][-1]*rec[i][-1]/(prec[i][-1]+rec[i][-1]) if (prec[i][-1]+rec[i][-1]) != 0 else None}
+        else:
+            stats[i] = {"PR": None, "RR": None, "FAR":None, "F1":None}
     return prec, rec, stats, match_ordered
 
 
