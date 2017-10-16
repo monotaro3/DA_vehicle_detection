@@ -8,10 +8,13 @@ from chainer.training import extension
 from chainer.training import extensions
 from chainer import serializers
 from chainercv.links.model.ssd import VGG16Extractor300
+from chainer.datasets import TransformDataset
 
 from SSD_for_vehicle_detection import *
 from DA_updater import *
-from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly
+from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly, COWC_dataset_processed, vehicle_classes
+from SSD_training import initSSD, Transform
+from SSD_test import ssd_evaluator
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -48,27 +51,30 @@ def main():
     parser.add_argument('--updater', type=str, default="Updater1", help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
-
+    parser.add_argument('--mode', type=str, default="DA1", help='mode of domain adaptation')
+    parser.add_argument('--ssdpath', type=str,  help='SSD model file')
+    parser.add_argument('--evalimg', type=str, help='img path for evaluation')
 
     args = parser.parse_args()
-    report_keys = ["loss_t_enc", "loss_dis"]
 
-    # Set up dataset
+    if args.mode == "DA1":
+        report_keys = ["loss_cls","loss_t_enc", "loss_dis"]
+    else:
+        report_keys = ["loss_t_enc", "loss_dis"]
 
-    source_dataset = COWC_fmap_set(args.source_dataset)
-    target_dataset = Dataset_imgonly(args.target_dataset)
+        # Set up dataset
+
+        source_dataset = COWC_fmap_set(args.source_dataset)
+        target_dataset = Dataset_imgonly(args.target_dataset)
+
     # train_iter1 = chainer.iterators.SerialIterator(source_dataset, args.batchsize)
     # train_iter2 = chainer.iterators.SerialIterator(target_dataset, args.batchsize)
-    train_iter1 = chainer.iterators.MultiprocessIterator(source_dataset, args.batchsize)
-    train_iter2 = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
+
 
     # Setup algorithm specific networks and updaters
     models = []
     opts = {}
-    updater_args = {
-        "iterator": {'main': train_iter1,'target': train_iter2,},
-        "device": args.gpu
-    }
+
 
     # if args.algorithm == "dcgan":
     #     from dcgan.updater import Updater
@@ -78,12 +84,26 @@ def main():
     #     else:
     #         raise NotImplementedError()
 
-    Updater = eval(args.updater) #Updater1
-    Discriminator = eval(args.adda_model)#ADDA_Discriminator2 #choose discriminator type
-    discriminator = Discriminator()
-    target_encoder = VGG16Extractor300()
-    serializers.load_npz(args.initencoder, target_encoder)
-    models = [discriminator, target_encoder]
+    if args.mode == "DA1":
+        Updater = DA_updater1
+        Discriminator = DA1_dicriminator
+        discriminator = Discriminator()
+        ssd_model = initSSD("ssd300",0.3,args.ssdpath)
+        #target_encoder = ssd_model.extractor
+        models = [discriminator, ssd_model]
+        source_dataset = TransformDataset(
+            COWC_dataset_processed(split="train", datadir=args.source_dataset),
+            Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
+        target_dataset = Dataset_imgonly(args.target_dataset)
+
+    else:
+        Updater = eval(args.updater) #Updater1
+        Discriminator = eval(args.adda_model)#ADDA_Discriminator2 #choose discriminator type
+        discriminator = Discriminator()
+        target_encoder = VGG16Extractor300()
+
+        serializers.load_npz(args.initencoder, target_encoder)
+        models = [discriminator, target_encoder]
 
     if args.gpu >= 0:
         chainer.cuda.get_device_from_id(args.gpu).use()
@@ -91,9 +111,20 @@ def main():
         for m in models:
             m.to_gpu()
 
+    train_iter1 = chainer.iterators.MultiprocessIterator(source_dataset, args.batchsize)
+    train_iter2 = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
+    updater_args = {
+        "iterator": {'main': train_iter1, 'target': train_iter2, },
+        "device": args.gpu
+    }
+
     # Set up optimizers
     opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
-    opts["opt_t_enc"] = make_optimizer(target_encoder, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    if args.mode == "DA1":
+        opts["opt_cls"] = make_optimizer(ssd_model, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    else:
+        opts["opt_t_enc"] = make_optimizer(target_encoder, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+
 
     updater_args["optimizer"] = opts
     updater_args["models"] = models
@@ -111,6 +142,11 @@ def main():
                                         trigger=(args.display_interval, 'iteration')))
     trainer.extend(extensions.PrintReport(report_keys), trigger=(args.display_interval, 'iteration'))
     trainer.extend(extensions.ProgressBar(update_interval=10))
+
+    trainer.extend(
+        ssd_evaluator(
+            args.evalimg, ssd_model,label_names=vehicle_classes),
+        trigger=(1, 'iteration'))
 
     # Run the training
     trainer.run()
