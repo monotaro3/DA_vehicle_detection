@@ -10,6 +10,7 @@ from chainercv.links.model.ssd import VGG16Extractor300
 import pickle
 import cv2 as cv
 import math
+#from process_COWC import scale_img_bbox
 
 def gen_dms_time_str(time_sec):
     sec = time_sec % 60
@@ -159,6 +160,57 @@ def make_img_cutout(imgdir,savedir,imgsize,margin = 0,useEdge=False):
                 with open(listfile_path, 'a') as list:
                     list.write(rootname + "\n")
 
+def scale_img_bbox(img, bbox, output_size_h):
+    h,w,c = img.shape
+    scale = output_size_h / h
+    img_ = cv.resize(img, (int(w*scale), output_size_h))
+    bbox_ = []
+    for b in bbox:
+        xmin = math.floor(b[0] * scale)
+        ymin = math.floor(b[1] * scale)
+        xmax = math.floor(b[2] * scale)
+        ymax = math.floor(b[3] * scale)
+        b_ = [xmin,ymin,xmax,ymax]
+        for i in range(len(b_)):
+            if b_[i] == 0: b_[i] = 1
+            if b_[i] > output_size_h: b_[i] = output_size_h
+        bbox_.append(b_)
+    return img_, bbox_
+
+def scaleConvert(srcdir,dstdir,scale):
+    if srcdir == dstdir :
+        print("srcdir and dstdir must not be the same")
+        return
+    if not os.path.isdir(dstdir): os.makedirs(dstdir)
+    files = os.listdir(srcdir)
+    uniques = []
+    for f in files:
+        root, ext = os.path.splitext(f)
+        if not root in uniques:
+            uniques.append(root)
+    for u in uniques:
+        srcimg = cv.imread(os.path.join(srcdir,u + ".tif"))
+        h, w, c = srcimg.shape
+        outpusize_h = int(h * scale)
+        srcbbox = []
+        with open(os.path.join(srcdir,u + ".txt"),"r") as annotations:
+            line = annotations.readline()
+            while (line):
+                xmin, ymin, xmax, ymax = line.split(",")
+                xmin = int(xmin)
+                ymin = int(ymin)
+                xmax = int(xmax)
+                ymax = int(ymax)
+                srcbbox.append([xmin, ymin, xmax, ymax])
+                line = annotations.readline()
+        dstimg, dstbbox = scale_img_bbox(srcimg,srcbbox,outpusize_h)
+        cv.imwrite(os.path.join(dstdir,u + ".tif"),dstimg)
+        with open(os.path.join(dstdir, u + ".txt"), 'w') as bbox_text:
+            for b in dstbbox:
+                bbox_text.write(",".join(map(str, b)) + "\n")
+
+
+
 
 if __name__ == "__main__":
     #convertDepth('c:/work/spacenet\\raw\\RGB-PanSharpen_AOI_5_Khartoum_img1.tif',"c:/work/test4.tif")
@@ -166,4 +218,5 @@ if __name__ == "__main__":
     # serializers.load_npz("model/snapshot_iter_30000", trainer)
     # pass
     #convertImgs2fmaps("E:/work/vehicle_detection_dataset/cowc_300px_0.3/train","E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap","model/vgg_300_0.3_30000")
-    make_img_cutout("E:/work/vehicle_detection_dataset/Khartoum_adda_raw","E:/work/vehicle_detection_dataset/Khartoum_adda",300)
+    #make_img_cutout("E:/work/vehicle_detection_dataset/Khartoum_adda_raw","E:/work/vehicle_detection_dataset/Khartoum_adda",300)
+    scaleConvert("../DA_images/NTT","../DA_images/NTT_scale0.3",0.16/0.3)
