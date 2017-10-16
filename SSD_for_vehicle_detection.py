@@ -43,6 +43,8 @@ class SSD300_vd(SSD300):
         if path:
             _load_npz(path, self)
 
+
+
 class ADDA_Discriminator(Chain):
     def __init__(self, wscale=0.02):
         w = chainer.initializers.Normal(wscale)
@@ -201,6 +203,21 @@ class ADDA_Discriminator4(Chain):
         h = F.leaky_relu(self.conv3(h))
         h = F.max_pooling_2d(h, 2)
         h = F.leaky_relu(self.l(h))
+        return h
+
+class DA1_dicriminator(Chain):
+    def __init__(self):
+        #w = chainer.initializers.Normal(wscale)
+        super(DA1_dicriminator, self).__init__()
+        # init = {
+        #     'initialW': initializers.LeCunUniform(),
+        #     'initial_bias': initializers.Zero(),
+        # }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(1, 3, pad=1)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.conv1(x[0]))
         return h
 
 
