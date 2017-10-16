@@ -146,7 +146,7 @@ def main():
     trainer.extend(
         ssd_evaluator(
             args.evalimg, ssd_model,label_names=vehicle_classes),
-        trigger=(1, 'iteration'))
+        trigger=(args.evaluation_interval, 'iteration'))
 
     # Run the training
     trainer.run()
