@@ -156,14 +156,16 @@ class DA_updater1(chainer.training.StandardUpdater):
         tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
         y_target = self.dis(tgt_fmap)
 
+        n_fmap_elements = y_target.shape[2]*y_target.shape[3]
+
         # z = Variable(xp.asarray(self.gen.make_hidden(batchsize)))
         # x_fake = self.gen(z)
         # y_fake = self.dis(x_fake)
 
         # loss_dis = F.sum(F.softplus(-y_real)) / batchsize
         # loss_dis += F.sum(F.softplus(y_fake)) / batchsize
-        loss_dis = F.sum(F.softplus(-y_source)) / batchsize
-        loss_dis += F.sum(F.softplus(y_target)) / batchsize
+        loss_dis = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+        loss_dis += F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
 
         loss_t_enc = F.sum(F.softplus(-y_target)) / batchsize
 
