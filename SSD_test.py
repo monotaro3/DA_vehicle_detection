@@ -1,7 +1,9 @@
 # coding: utf-8
 
 import matplotlib.pyplot as plot
+import chainer
 from chainer import serializers
+from chainer import reporter
 from chainercv import utils
 import math
 import os
@@ -71,20 +73,20 @@ def ssd_predict(model, image, margin,nms_thresh = 0.45):
 
     return bbox, label, score
 
-def main(ssd_path,imagepath,modelsize="ssd300",resolution=0.16,procDir=False,testonly = False,resultdir = "result"):
+def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=False, testonly = False, resultdir ="result", evalonly=False):
     margin = 50
     gpu = 0
 
     images = []
     gt_files = []
 
-    if not os.path.isdir(resultdir):
+    if (not evalonly) and (not os.path.isdir(resultdir)):
         os.makedirs(resultdir)
 
     if procDir:
         if not os.path.isdir(imagepath):
             try:
-                raise(ValueError("invalid directory path"))
+                raise(ValueError("invalid image directory path"))
             except ValueError as e:
                 print(e)
                 return
@@ -101,16 +103,19 @@ def main(ssd_path,imagepath,modelsize="ssd300",resolution=0.16,procDir=False,tes
             root, ext = os.path.splitext(imagepath)
             gt_files.append(root + ".txt")
 
-    if modelsize == 'ssd300':
-        model = SSD300_vd(
-            n_fg_class=len(vehicle_classes),
-            defaultbox_size=defaultbox_size_300[resolution])
-    else:
-        model = SSD512_vd(
-            n_fg_class=len(vehicle_classes),
-            defaultbox_size=defaultbox_size_512[resolution])
+    if not isinstance(ssd_model,chainer.link.Link):
+        if modelsize == 'ssd300':
+            model = SSD300_vd(
+                n_fg_class=len(vehicle_classes),
+                defaultbox_size=defaultbox_size_300[resolution])
+        else:
+            model = SSD512_vd(
+                n_fg_class=len(vehicle_classes),
+                defaultbox_size=defaultbox_size_512[resolution])
 
-    serializers.load_npz(ssd_path, model)
+        serializers.load_npz(ssd_model, model)
+    else:
+        model = ssd_model
     if gpu >= 0: model.to_gpu()
 
     #predict
@@ -133,40 +138,86 @@ def main(ssd_path,imagepath,modelsize="ssd300",resolution=0.16,procDir=False,tes
     if not testonly:
         result, stats, matches = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
 
-    #visualizations
-    for imagepath , bbox, label, score in zip(images,bboxes,labels,scores):
-        dir, imagename = os.path.split(imagepath)
-        result_name, ext = os.path.splitext(imagename)
-        image = utils.read_image(imagepath, color=True)
-        vis_bbox(
-            image, bbox, label, score, label_names=vehicle_classes)
-        #plot.show()
-        plot.savefig(os.path.join(resultdir,result_name+ "_vis1.png"))
+    if not evalonly:
+        #visualizations
+        for imagepath , bbox, label, score in zip(images,bboxes,labels,scores):
+            dir, imagename = os.path.split(imagepath)
+            result_name, ext = os.path.splitext(imagename)
+            image = utils.read_image(imagepath, color=True)
+            vis_bbox(
+                image, bbox, label, score, label_names=vehicle_classes)
+            #plot.show()
+            plot.savefig(os.path.join(resultdir,result_name+ "_vis1.png"))
 
-        #result
-        image_ = image.copy()
-        image_ = image_.transpose(1,2,0)
-        image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
-        if testonly:
-            draw_rect(image_, bbox, np.array((1,) * bbox.shape[0], dtype=np.int8))
-        else:
-            draw_rect(image_,bbox,matches[images.index(imagepath)])
-        cv.imwrite(os.path.join(resultdir,result_name+ "_vis2.png"),image_)
+            #result
+            image_ = image.copy()
+            image_ = image_.transpose(1,2,0)
+            image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
+            if testonly:
+                draw_rect(image_, bbox, np.array((1,) * bbox.shape[0], dtype=np.int8))
+            else:
+                draw_rect(image_,bbox,matches[images.index(imagepath)])
+            cv.imwrite(os.path.join(resultdir,result_name+ "_vis2.png"),image_)
 
-        #gt visualization
-        image_ = image.copy()
-        image_ = image_.transpose(1, 2, 0)
-        image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
-        gt_bbox = gt_bboxes[images.index(imagepath)]
-        draw_rect(image_, gt_bbox, np.array((0,) * gt_bbox.shape[0],dtype=np.int8))
-        cv.imwrite(os.path.join(resultdir,result_name+ "_vis_gt.png"), image_)
+            #gt visualization
+            image_ = image.copy()
+            image_ = image_.transpose(1, 2, 0)
+            image_ = cv.cvtColor(image_, cv.COLOR_RGB2BGR)
+            gt_bbox = gt_bboxes[images.index(imagepath)]
+            draw_rect(image_, gt_bbox, np.array((0,) * gt_bbox.shape[0],dtype=np.int8))
+            cv.imwrite(os.path.join(resultdir,result_name+ "_vis_gt.png"), image_)
 
+        result_txt = os.path.join(resultdir,"result.txt")
+        with open(result_txt,mode="w") as f:
+            f.write(str(result) +"\n" + str(stats))
     print(result)
     print(stats)
 
+    return result, stats
+
+class ssd_evaluator(chainer.training.extensions.Evaluator):
+    trigger = 1, 'epoch'
+    default_name = 'validation'
+    priority = chainer.training.PRIORITY_WRITER
+
+    def __init__(
+            self, img_dir, target,resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None):
+        super(ssd_evaluator, self).__init__(
+            None, target)
+        self.img_dir = img_dir
+        self.resolution = resolution
+        self.modelsize = modelsize
+        self.label_names = label_names
+        self.evalonly = evalonly
+
+    def evaluate(self):
+        target = self._targets['main']
+        result, stats = ssd_test(target, self.img_dir, procDir=True, resolution=self.resolution,
+                 modelsize=self.modelsize,evalonly=self.evalonly)
+
+        report = {'map': result['map']}
+        for i in range(len(stats)):
+            classname = self.label_names[i] if self.label_names is not None else "class"+str(i)
+            report['PR/{:s}'.format(classname)] = stats[i]['PR']
+            report['RR/{:s}'.format(classname)] = stats[i]['RR']
+            report['FAR/{:s}'.format(classname)] = stats[i]['FAR']
+            report['F1/{:s}'.format(classname)] = stats[i]['F1']
+
+        if self.label_names is not None:
+            for l, label_name in enumerate(self.label_names):
+                try:
+                    report['ap/{:s}'.format(label_name)] = result['ap'][l]
+                except IndexError:
+                    report['ap/{:s}'.format(label_name)] = np.nan
+
+        observation = {}
+        with reporter.report_scope(observation):
+            reporter.report(report, target)
+        return observation
+
 if __name__ == "__main__":
-    imagepath = "c:/work/DA_images/NTT"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
-    modelpath = "model/ssd_300_0.16_120000"
-    main(modelpath,imagepath,procDir=True,resultdir="result/NTT",resolution=0.16,modelsize="ssd300")
+    imagepath = "c:/work/DA_images/NTT_scale0.3"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
+    modelpath = "model/ssd_300_0.3_50000_daug"
+    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/NTT_scale0.3_daug/",resolution=0.3,modelsize="ssd300")
 
 
