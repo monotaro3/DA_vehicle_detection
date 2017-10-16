@@ -37,7 +37,7 @@ def main():
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result/addatest', help='Directory to output the result')
     parser.add_argument('--snapshot_interval', type=int, default=10000, help='Interval of snapshot')
-    parser.add_argument('--evaluation_interval', type=int, default=10000, help='Interval of evaluation')
+    parser.add_argument('--evaluation_interval', type=int, default=10, help='Interval of evaluation')
     parser.add_argument('--display_interval', type=int, default=10, help='Interval of displaying log to console')
     parser.add_argument('--n_dis', type=int, default=5, help='number of discriminator update per generator update')
     parser.add_argument('--gamma', type=float, default=0.5, help='hyperparameter gamma')
@@ -58,7 +58,8 @@ def main():
     args = parser.parse_args()
 
     if args.mode == "DA1":
-        report_keys = ["loss_cls","loss_t_enc", "loss_dis"]
+        report_keys = ["loss_cls","loss_t_enc", "loss_dis", 'validation/main/map','validation/main/RR/car',
+                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car']
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
 
