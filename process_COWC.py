@@ -4,69 +4,54 @@ import cv2 as cv
 import numpy as np
 import os
 import math
-from utils import decode_mask2bbox
+from utils import decode_mask2bbox, scale_img_bbox
 
-process_directories = []
-# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
-# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
-# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Toronto_ISPRS")
-# process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Utah_AGRC")
+# process_directories = []
+# # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
+# # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
+# # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Toronto_ISPRS")
+# # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Utah_AGRC")
+#
+# save_directory = ""
+#
+# directories_list = "process_COWC_dirs.txt"
+#
+# dir_lists = [dir_.strip() for dir_ in open(directories_list)]
+# for dir_ in dir_lists:
+#     record = dir_.split(",")
+#     if record[0] == "process" : process_directories.append(record[1])
+#     elif record[0] == "save": save_directory = record[1]
+#     else:
+#         try:
+#             raise ValueError("invalid directory specification")
+#         except ValueError as e:
+#             print(e)
+#
+# print("process dirs:")
+# print(process_directories)
+#
+# output_size = 300
+# windowsize = 50
+# adjust_margin = False
+# margin = 100
+# mask_margin_test = True
+# use_edge = False
+# scale = 0.5 # set None when not using, 0.5 -> halve the resolution
+# rotate = True
+#
+# train_img_number = 0
+# test_img_number = 0
+# all_img_number_unique = 0
+# train_imglist_text = os.path.join(save_directory,"list","train.txt")
+# test_imglist_text = os.path.join(save_directory,"list","validation.txt")
+#
+# if not os.path.isdir(os.path.join(save_directory,"train")):
+#     os.makedirs(os.path.join(save_directory,"train"))
+# if not os.path.isdir(os.path.join(save_directory, "validation")):
+#     os.makedirs(os.path.join(save_directory, "validation"))
+# if not os.path.isdir(os.path.join(save_directory, "list")):
+#     os.makedirs(os.path.join(save_directory, "list"))
 
-save_directory = ""
-
-directories_list = "process_COWC_dirs.txt"
-
-dir_lists = [dir_.strip() for dir_ in open(directories_list)]
-for dir_ in dir_lists:
-    record = dir_.split(",")
-    if record[0] == "process" : process_directories.append(record[1])
-    elif record[0] == "save": save_directory = record[1]
-    else:
-        try:
-            raise ValueError("invalid directory specification")
-        except ValueError as e:
-            print(e)
-
-print("process dirs:")
-print(process_directories)
-
-output_size = 300
-windowsize = 50
-adjust_margin = False
-margin = 100
-use_edge = False
-scale = 0.5 # set None when not using, 0.5 -> halve the resolution
-rotate = True
-
-train_img_number = 0
-test_img_number = 0
-all_img_number_unique = 0
-train_imglist_text = os.path.join(save_directory,"list","train.txt")
-test_imglist_text = os.path.join(save_directory,"list","validation.txt")
-
-if not os.path.isdir(os.path.join(save_directory,"train")):
-    os.makedirs(os.path.join(save_directory,"train"))
-if not os.path.isdir(os.path.join(save_directory, "validation")):
-    os.makedirs(os.path.join(save_directory, "validation"))
-if not os.path.isdir(os.path.join(save_directory, "list")):
-    os.makedirs(os.path.join(save_directory, "list"))
-
-def scale_img_bbox(img, bbox, output_size):
-    h,w,c = img.shape
-    scale = output_size / h
-    img_ = cv.resize(img,(output_size,output_size))
-    bbox_ = []
-    for b in bbox:
-        xmin = math.floor(b[0] * scale)
-        ymin = math.floor(b[1] * scale)
-        xmax = math.floor(b[2] * scale)
-        ymax = math.floor(b[3] * scale)
-        b_ = [xmin,ymin,xmax,ymax]
-        for i in range(len(b_)):
-            if b_[i] == 0: b_[i] = 1
-            if b_[i] > output_size: b_[i] = output_size
-        bbox_.append(b_)
-    return img_, bbox_
 
 def rotateBbox(bbox_, bboxsize, degree, imgshape): #imgshape(np.array):(W,H)
     center = imgshape/2
@@ -90,8 +75,29 @@ def rotateBbox(bbox_, bboxsize, degree, imgshape): #imgshape(np.array):(W,H)
         bbox.append(b_.tolist())
     return bbox
 
+def mask_margin(img, bbox, margin,windowsize):
+    img_ = img.copy()
+    H, W, C = img.shape
+    mask_img = np.ones(img.shape[0:2],dtype=bool)
+    mask_img[margin:-margin,margin:-margin] = False
+    img_[mask_img] = 0
+    bbox_ = []
+    for b in bbox:
+        if b[0] == 1: center_x = b[2] - windowsize / 2
+        elif b[2] == W: center_x = b[0] + windowsize / 2
+        else: center_x = (b[0] + b[2]) / 2
+        if b[1] == 1: center_y = b[3] - windowsize / 2
+        elif b[3] == H : center_y = b[1] + windowsize / 2
+        else: center_y = (b[1] + b[3]) / 2
+        if center_x <= margin or center_y <= margin  or center_x > W - margin or center_y > H - margin: continue
+        xmin = b[0] if b[0] > margin else margin + 1
+        ymin = b[1] if b[1] > margin else margin + 1
+        xmax = b[2] if b[2] <= W - margin else W - margin
+        ymax = b[3] if b[3] <= H - margin else H - margin
+        bbox_.append([xmin,ymin,xmax,ymax])
+    return img_, bbox_
 
-def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize,rotate):
+def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize,rotate,mask_margin_test):
     image = cv.imread(image_path)
     image_mask = cv.imread(image_mask_path)
     height, width, channel = image.shape
@@ -163,6 +169,11 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                                     cutout = cutout_.copy()
                                     bbox = bbox_.copy()
 
+                                if usage == "validation":
+                                    if margin > 0 and mask_margin_test:
+                                        cutout, bbox = mask_margin(cutout, bbox, margin,windowsize)
+                                    if len(bbox) == 0: continue
+
                                 if cutout_size != size_output:
                                     cutout, bbox = scale_img_bbox(cutout, bbox, size_output)
 
@@ -177,22 +188,69 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                                     with open(test_imglist_text,'a') as test_list:
                                         test_list.write('{0:010d}'.format(i)+"\n")
 
+if __name__ == "__main__":
 
-cutout_size = math.floor(output_size / scale) if scale != None else output_size
+    process_directories = []
+    # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
+    # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
+    # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Toronto_ISPRS")
+    # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Utah_AGRC")
 
-for directory in process_directories:
-    print("current directory:"+directory)
-    filelist = os.listdir(directory)
-    filelist.sort()
-    image_list = []
-    image_mask_list = []
-    for file in filelist:
-        root, ext = os.path.splitext(file)
-        if ext == ".png" and root.find("Annotated") == -1:
-            image_list.append(os.path.join(directory, file))
-            image_mask_list.append(os.path.join(directory, root + "_Annotated_Cars.png"))
+    save_directory = ""
 
-    for image_path, image_mask_path in zip(image_list,image_mask_list):
-        print("processing image:" + image_path)
-        make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize,rotate)
+    directories_list = "process_COWC_dirs.txt"
+
+    dir_lists = [dir_.strip() for dir_ in open(directories_list)]
+    for dir_ in dir_lists:
+        record = dir_.split(",")
+        if record[0] == "process" : process_directories.append(record[1])
+        elif record[0] == "save": save_directory = record[1]
+        else:
+            try:
+                raise ValueError("invalid directory specification")
+            except ValueError as e:
+                print(e)
+
+    print("process dirs:")
+    print(process_directories)
+
+    output_size = 300
+    windowsize = 50
+    adjust_margin = False
+    margin = 100
+    mask_margin_test = True
+    use_edge = False
+    scale = 0.5 # set None when not using, 0.5 -> halve the resolution
+    rotate = True
+
+    train_img_number = 0
+    test_img_number = 0
+    all_img_number_unique = 0
+    train_imglist_text = os.path.join(save_directory,"list","train.txt")
+    test_imglist_text = os.path.join(save_directory,"list","validation.txt")
+
+    if not os.path.isdir(os.path.join(save_directory,"train")):
+        os.makedirs(os.path.join(save_directory,"train"))
+    if not os.path.isdir(os.path.join(save_directory, "validation")):
+        os.makedirs(os.path.join(save_directory, "validation"))
+    if not os.path.isdir(os.path.join(save_directory, "list")):
+        os.makedirs(os.path.join(save_directory, "list"))
+
+    cutout_size = math.floor(output_size / scale) if scale != None else output_size
+
+    for directory in process_directories:
+        print("current directory:"+directory)
+        filelist = os.listdir(directory)
+        filelist.sort()
+        image_list = []
+        image_mask_list = []
+        for file in filelist:
+            root, ext = os.path.splitext(file)
+            if ext == ".png" and root.find("Annotated") == -1:
+                image_list.append(os.path.join(directory, file))
+                image_mask_list.append(os.path.join(directory, root + "_Annotated_Cars.png"))
+
+        for image_path, image_mask_path in zip(image_list,image_mask_list):
+            print("processing image:" + image_path)
+            make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize,rotate,mask_margin_test)
 
