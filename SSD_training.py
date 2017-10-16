@@ -43,6 +43,21 @@ defaultbox_size_512 = {
     0.3: (25.6, 30.72, 116.74, 202.75, 288.79, 374.78, 460.8, 546.82),
 }  # defaultbox size corresponding to the image resolution
 
+def initSSD(modelname,resolution,path=None):
+    if modelname == "ssd300":
+        model = SSD300_vd(
+            n_fg_class=len(vehicle_classes),
+            pretrained_model='imagenet', defaultbox_size=defaultbox_size_300[resolution])
+    elif modelname == "ssd512":
+        model = SSD512_vd(
+            n_fg_class=len(vehicle_classes),
+            pretrained_model='imagenet', defaultbox_size=defaultbox_size_512[resolution])
+    if path != None:
+        serializers.load_npz(path, model)
+    return model
+
+
+
 
 class ConcatenatedDataset(chainer.dataset.DatasetMixin):
 
@@ -156,7 +171,7 @@ def main():
     args = parser.parse_args()
 
     batchsize = args.batchsize
-    gpu = 0
+    gpu = args.gpu
     out = args.out
     resume = args.resume
 
@@ -248,10 +263,10 @@ def main():
     if resume:
         serializers.load_npz(resume, trainer)
 
-    # serializers.load_npz("model/snapshot_iter_30000", trainer)
-    # serializers.save_npz("model/ssd_300_0.3_30000",trainer.updater._optimizers["main"].target.model)
+    serializers.load_npz("model/snapshot_iter_300_0.16_55000", trainer)
+    serializers.save_npz("model/ssd_300_0.16_55000",trainer.updater._optimizers["main"].target.model)
 
-    trainer.run()
+    #trainer.run()
 
     exectime = time.time() - exectime
     exectime_str = gen_dms_time_str(exectime)
