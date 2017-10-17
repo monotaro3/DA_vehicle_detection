@@ -170,7 +170,7 @@ class DA_updater1(chainer.training.StandardUpdater):
         #loss_dis += F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
         loss_dis = loss_dis_src + loss_dis_tgt
 
-        loss_t_enc = F.sum(F.softplus(-y_target)) / batchsize
+        loss_t_enc = F.sum(F.softplus(-y_target)) / n_fmap_elements / batchsize
 
         #update cls(and t_enc) by cls_loss and loss_t_enc
         self.cls.cleargrads()
