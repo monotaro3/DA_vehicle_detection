@@ -47,7 +47,7 @@ def main():
     parser.add_argument('--adam_beta2', type=float, default=0.9, help='beta2 in Adam optimizer')
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
-    parser.add_argument('--adda_model', type = str, default= "ADDA_Discriminator4", help='adda class name to be used')
+    parser.add_argument('--DA_model', type = str, help='DA discriminator class name to be used')
     parser.add_argument('--updater', type=str, default="Updater1", help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -59,7 +59,7 @@ def main():
     args = parser.parse_args()
 
     if args.mode == "DA1":
-        report_keys = ["loss_cls","loss_t_enc", "loss_dis", 'validation/main/map','validation/main/RR/car',
+        report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
                        'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car']
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
@@ -88,7 +88,10 @@ def main():
 
     if args.mode == "DA1":
         Updater = DA_updater1
-        Discriminator = DA1_dicriminator
+        if args.DA_model:
+            Discriminator = eval(args.DA_model)
+        else:
+            Discriminator = DA1_dicriminator
         discriminator = Discriminator()
         ssd_model = initSSD("ssd300",0.3,args.ssdpath)
         #target_encoder = ssd_model.extractor
