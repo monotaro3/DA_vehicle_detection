@@ -164,8 +164,11 @@ class DA_updater1(chainer.training.StandardUpdater):
 
         # loss_dis = F.sum(F.softplus(-y_real)) / batchsize
         # loss_dis += F.sum(F.softplus(y_fake)) / batchsize
-        loss_dis = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
-        loss_dis += F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+        loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+        loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+        #loss_dis = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+        #loss_dis += F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+        loss_dis = loss_dis_src + loss_dis_tgt
 
         loss_t_enc = F.sum(F.softplus(-y_target)) / batchsize
 
@@ -185,3 +188,5 @@ class DA_updater1(chainer.training.StandardUpdater):
         chainer.reporter.report({'loss_t_enc': loss_t_enc})
         chainer.reporter.report({'loss_dis': loss_dis})
         chainer.reporter.report({'loss_cls': cls_loss})
+        chainer.reporter.report({'loss_dis_src': loss_dis_src})
+        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
