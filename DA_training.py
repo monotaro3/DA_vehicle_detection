@@ -54,6 +54,7 @@ def main():
     parser.add_argument('--mode', type=str, default="DA1", help='mode of domain adaptation')
     parser.add_argument('--ssdpath', type=str,  help='SSD model file')
     parser.add_argument('--evalimg', type=str, help='img path for evaluation')
+    parser.add_argument('--resume', type=str, help='trainer snapshot path for resume')
 
     args = parser.parse_args()
 
@@ -148,6 +149,9 @@ def main():
         ssd_evaluator(
             args.evalimg, ssd_model,label_names=vehicle_classes),
         trigger=(args.evaluation_interval, 'iteration'))
+
+    if args.resume:
+        serializers.load_npz(args.resume, trainer)
 
     # Run the training
     trainer.run()
