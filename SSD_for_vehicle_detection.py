@@ -205,10 +205,10 @@ class ADDA_Discriminator4(Chain):
         h = F.leaky_relu(self.l(h))
         return h
 
-class DA1_dicriminator(Chain):
+class DA1_discriminator(Chain):
     def __init__(self):
         #w = chainer.initializers.Normal(wscale)
-        super(DA1_dicriminator, self).__init__()
+        super(DA1_discriminator, self).__init__()
         # init = {
         #     'initialW': initializers.LeCunUniform(),
         #     'initial_bias': initializers.Zero(),
@@ -221,10 +221,10 @@ class DA1_dicriminator(Chain):
         return h
 
 
-class DA2_dicriminator(Chain):
+class DA2_discriminator(Chain):
     def __init__(self):
         #w = chainer.initializers.Normal(wscale)
-        super(DA2_dicriminator, self).__init__()
+        super(DA2_discriminator, self).__init__()
         # init = {
         #     'initialW': initializers.LeCunUniform(),
         #     'initial_bias': initializers.Zero(),

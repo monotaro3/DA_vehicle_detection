@@ -91,7 +91,7 @@ def main():
         if args.DA_model:
             Discriminator = eval(args.DA_model)
         else:
-            Discriminator = DA1_dicriminator
+            Discriminator = DA1_discriminator
         discriminator = Discriminator()
         ssd_model = initSSD("ssd300",0.3,args.ssdpath)
         #target_encoder = ssd_model.extractor
