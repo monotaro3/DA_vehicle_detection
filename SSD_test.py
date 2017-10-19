@@ -182,7 +182,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
     priority = chainer.training.PRIORITY_WRITER
 
     def __init__(
-            self, img_dir, target,updater, savedir, resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None,save_bottom = 60):
+            self, img_dir, target,updater, savedir, resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None,save_bottom = 0.6):
         super(ssd_evaluator, self).__init__(
             None, target)
         self.img_dir = img_dir
