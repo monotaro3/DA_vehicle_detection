@@ -11,6 +11,7 @@ import numpy as np
 from chainercv.visualizations import vis_bbox
 from eval_detection_voc_custom import eval_detection_voc_custom
 import cv2 as cv
+import csv
 
 #--custom
 from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
@@ -181,7 +182,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
     priority = chainer.training.PRIORITY_WRITER
 
     def __init__(
-            self, img_dir, target,resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None):
+            self, img_dir, target,updater, savedir, resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None,save_bottom = 60):
         super(ssd_evaluator, self).__init__(
             None, target)
         self.img_dir = img_dir
@@ -189,6 +190,14 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
         self.modelsize = modelsize
         self.label_names = label_names
         self.evalonly = evalonly
+        self.best_map = save_bottom
+        self.best_F1 = save_bottom
+        self.best_mean = save_bottom
+        self.rank_map =  []
+        self.rank_F1 = []
+        self.rank_mean = []
+        self.updater = updater
+        self.savedir = savedir
 
     def evaluate(self):
         target = self._targets['main']
@@ -210,14 +219,58 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
                 except IndexError:
                     report['ap/{:s}'.format(label_name)] = np.nan
 
+        current_iteration = self.updater.iteration
+        save_flag = False
+        del_iter = []
+        mean_F1 = 0
+        for i in range(len(stats)):
+            mean_F1 += stats[i]['F1']
+        mean_F1 /= len(stats)
+        mean_map_mF1 = (result['map'] + mean_F1) / 2
+        if result['map'] > self.best_map:
+            self.best_map = result['map']
+            save_flag = True
+            if len(self.rank_map) ==5:
+                iter = self.rank_map.pop()[0]
+                if not iter in del_iter: del_iter.append(iter)
+            self.rank_map.append((current_iteration, self.best_map,mean_F1)).sort(key=lambda x: x[1],reverse=True)
+        if mean_F1 > self.best_F1:
+            self.best_F1 = mean_F1
+            save_flag = True
+            if len(self.rank_F1) ==5:
+                iter = self.rank_F1.pop()[0]
+                if not iter in del_iter: del_iter.append(iter)
+            self.rank_F1.append((current_iteration, result['map'],self.best_F1)).sort(key=lambda x: x[2],reverse=True)
+        if mean_map_mF1 > self.best_mean:
+            self.best_mean = mean_map_mF1
+            save_flag = True
+            if len(self.rank_mean) ==5:
+                iter = self.rank_mean.pop()[0]
+                if not iter in del_iter: del_iter.append(iter)
+            self.rank_mean.append((current_iteration, result['map'],mean_F1,self.best_mean)).sort(key=lambda x: x[3],reverse=True)
+        if save_flag:
+            serializers.save_npz(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(current_iteration)))
+        for iter in del_iter:
+            os.remove(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(iter)))
+
+        ranking_summary = [["best map"],["iter","map","F1"]]
+        ranking_summary.extend(self.rank_map)
+        ranking_summary = [[],["best F1"], ["iter", "map", "F1"]]
+        ranking_summary.extend(self.rank_F1)
+        ranking_summary = [[], ["best mean"], ["iter", "map", "F1","mean"]]
+        ranking_summary.extend(self.rank_mean)
+        with open(os.path.join(self.savedir,"ranking.csv"),"w") as f:
+            writer = csv.writer(f, lineterminator="\n")
+            writer.writerows(ranking_summary)
+
         observation = {}
         with reporter.report_scope(observation):
             reporter.report(report, target)
         return observation
 
 if __name__ == "__main__":
-    imagepath = "c:/work/DA_images/NTT_scale0.3"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
-    modelpath = "model/ssd_300_0.3_50000_daug"
-    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/NTT_scale0.3_daug/",resolution=0.3,modelsize="ssd300")
+    imagepath = "c:/work/DA_images/spacenet"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
+    modelpath = "model/SSD300_vd_DA1_spacenet_lt_9190.npz"
+    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/spacenet_DA1_daug_lt/9190/",resolution=0.3,modelsize="ssd300")
 
 
