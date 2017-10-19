@@ -190,9 +190,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
         self.modelsize = modelsize
         self.label_names = label_names
         self.evalonly = evalonly
-        self.best_map = save_bottom
-        self.best_F1 = save_bottom
-        self.best_mean = save_bottom
+        self.save_bottom = save_bottom
         self.rank_map =  []
         self.rank_F1 = []
         self.rank_mean = []
@@ -228,29 +226,38 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
                 mean_F1 += stats[i]['F1']
         mean_F1 /= len(stats)
         mean_map_mF1 = (result['map'] + mean_F1) / 2
-        if result['map'] > self.best_map:
-            self.best_map = result['map']
+        if len(self.rank_map) == 0:
+            if result['map'] > self.save_bottom:
+                save_flag = True
+                self.rank_map.append([current_iteration, result['map'],mean_F1])
+        elif result['map'] > self.rank_map[-1][1]:
             save_flag = True
             if len(self.rank_map) ==5:
                 iter = self.rank_map.pop()[0]
                 if not iter in del_iter: del_iter.append(iter)
-            self.rank_map.append([current_iteration, self.best_map,mean_F1])
+            self.rank_map.append([current_iteration, result['map'],mean_F1])
             self.rank_map.sort(key=lambda x: x[1],reverse=True)
-        if mean_F1 > self.best_F1:
-            self.best_F1 = mean_F1
+        if len(self.rank_F1) == 0:
+            if mean_F1 > self.save_bottom:
+                save_flag = True
+                self.rank_F1.append([current_iteration, result['map'],mean_F1])
+        elif mean_F1 > self.rank_F1[-1][2]:
             save_flag = True
             if len(self.rank_F1) == 5:
                 iter = self.rank_F1.pop()[0]
                 if not iter in del_iter: del_iter.append(iter)
-            self.rank_F1.append([current_iteration, result['map'],self.best_F1])
+            self.rank_F1.append([current_iteration, result['map'],mean_F1])
             self.rank_F1.sort(key=lambda x: x[2],reverse=True)
-        if mean_map_mF1 > self.best_mean:
-            self.best_mean = mean_map_mF1
+        if len(self.rank_mean) == 0:
+            if mean_map_mF1 > self.save_bottom:
+                save_flag = True
+                self.rank_mean.append([current_iteration, result['map'],mean_F1,mean_map_mF1])
+        elif mean_map_mF1 > self.rank_mean[-1][3]:
             save_flag = True
             if len(self.rank_mean) ==5:
                 iter = self.rank_mean.pop()[0]
                 if not iter in del_iter: del_iter.append(iter)
-            self.rank_mean.append([current_iteration, result['map'],mean_F1,self.best_mean])
+            self.rank_mean.append([current_iteration, result['map'],mean_F1,mean_map_mF1])
             self.rank_mean.sort(key=lambda x: x[3],reverse=True)
         if save_flag:
             serializers.save_npz(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(current_iteration)),target)
