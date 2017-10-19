@@ -54,6 +54,18 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD"):
     # map = np.array(data["validation/main/map"])
     # f1 = np.array(data["validation/main/F1/car"])
     #index_sorted_
+    try:
+        map = data["validation/main/map"]
+        f1 = data["validation/main/F1/car"]
+        mean = []
+        for i in range(len(map)):
+            if map[i] != None and f1[i] != None:
+                mean.append((i,(map[i]+f1[i])/2))
+        mean.sort(key=lambda x: x[1],reverse=True)
+        for j in range(10):
+            print("map:{0},f1:{1},mean:{2} iter{3}\n".format(map[mean[j][0]],f1[mean[j][0]],mean[j][1],itr[mean[j][0]]))
+    except KeyError:
+        pass
     for key in data.keys():
         d_array = np.array(data[key])
         index_sorted = np.argsort(d_array)[::-1]
@@ -72,5 +84,5 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD"):
     # plt.show()
 
 if __name__ == "__main__":
-    gengraph("log",figname="train_log_300_0.3_daug_DA_map_NTT.png",mode="DA_eval")
+    gengraph("log",figname="train_log_300_0.3_daug_DA2_map_spacenet_eval.png",mode="DA_eval")
 
