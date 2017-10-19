@@ -224,7 +224,8 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
         del_iter = []
         mean_F1 = 0
         for i in range(len(stats)):
-            mean_F1 += stats[i]['F1']
+            if stats[i]['F1'] != None:
+                mean_F1 += stats[i]['F1']
         mean_F1 /= len(stats)
         mean_map_mF1 = (result['map'] + mean_F1) / 2
         if result['map'] > self.best_map:
@@ -233,25 +234,29 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
             if len(self.rank_map) ==5:
                 iter = self.rank_map.pop()[0]
                 if not iter in del_iter: del_iter.append(iter)
-            self.rank_map.append((current_iteration, self.best_map,mean_F1)).sort(key=lambda x: x[1],reverse=True)
+            self.rank_map.append([current_iteration, self.best_map,mean_F1])
+            self.rank_map.sort(key=lambda x: x[1],reverse=True)
         if mean_F1 > self.best_F1:
             self.best_F1 = mean_F1
             save_flag = True
-            if len(self.rank_F1) ==5:
+            if len(self.rank_F1) == 5:
                 iter = self.rank_F1.pop()[0]
                 if not iter in del_iter: del_iter.append(iter)
-            self.rank_F1.append((current_iteration, result['map'],self.best_F1)).sort(key=lambda x: x[2],reverse=True)
+            self.rank_F1.append([current_iteration, result['map'],self.best_F1])
+            self.rank_F1.sort(key=lambda x: x[2],reverse=True)
         if mean_map_mF1 > self.best_mean:
             self.best_mean = mean_map_mF1
             save_flag = True
             if len(self.rank_mean) ==5:
                 iter = self.rank_mean.pop()[0]
                 if not iter in del_iter: del_iter.append(iter)
-            self.rank_mean.append((current_iteration, result['map'],mean_F1,self.best_mean)).sort(key=lambda x: x[3],reverse=True)
+            self.rank_mean.append([current_iteration, result['map'],mean_F1,self.best_mean])
+            self.rank_mean.sort(key=lambda x: x[3],reverse=True)
         if save_flag:
-            serializers.save_npz(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(current_iteration)))
+            serializers.save_npz(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(current_iteration)),target)
         for iter in del_iter:
-            os.remove(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(iter)))
+            if not iter in [i[0] for i in self.rank_map + self.rank_F1 + self.rank_mean]:
+                os.remove(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(iter)))
 
         ranking_summary = [["best map"],["iter","map","F1"]]
         ranking_summary.extend(self.rank_map)
