@@ -148,9 +148,12 @@ def main():
     trainer.extend(extensions.PrintReport(report_keys), trigger=(args.display_interval, 'iteration'))
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
+    bestshot_dir = os.path.join(args.out,"bestshot")
+    if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
+
     trainer.extend(
         ssd_evaluator(
-            args.evalimg, ssd_model,label_names=vehicle_classes),
+            args.evalimg, ssd_model,updater,savedir=bestshot_dir, label_names=vehicle_classes),
         trigger=(args.evaluation_interval, 'iteration'))
 
     if args.resume:
