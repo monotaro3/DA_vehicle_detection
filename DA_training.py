@@ -51,14 +51,16 @@ def main():
     parser.add_argument('--updater', type=str, default="Updater1", help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
-    parser.add_argument('--mode', type=str, default="DA1", help='mode of domain adaptation')
+    parser.add_argument('--mode', type=str, choices = ["DA1", "DA1_buf"] ,default="DA1", help='mode of domain adaptation')
     parser.add_argument('--ssdpath', type=str,  help='SSD model file')
     parser.add_argument('--evalimg', type=str, help='img path for evaluation')
     parser.add_argument('--resume', type=str, help='trainer snapshot path for resume')
+    parser.add_argument('--bufsize', type=int, help='size of buffer for discriminator training')
+    parser.add_argument('--bufmode', type=int, help='mode of buffer(0:align src and tgt, 1:not align, 2:sort by loss value)')
 
     args = parser.parse_args()
 
-    if args.mode == "DA1":
+    if args.mode in ["DA1","DA1_buf"]:
         report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
                        'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car']
     else:
@@ -86,7 +88,7 @@ def main():
     #     else:
     #         raise NotImplementedError()
 
-    if args.mode == "DA1":
+    if args.mode in  ["DA1", "DA1_buf"]:
         Updater = DA_updater1
         if args.DA_model:
             Discriminator = eval(args.DA_model)
@@ -123,9 +125,18 @@ def main():
         "device": args.gpu
     }
 
+    if args.mode == "DA1_buf":
+        Updater = DA_updater1_buf
+        if args.bufsize < int(args.batchsize/2):
+            print("bufsize must not be smaller than batchsize/2")
+            raise ValueError
+        buffer = fmapBuffer(args.bufsize,mode=args.bufmode,discriminator=discriminator,gpu=args.gpu)
+        updater_args["buffer"] = buffer
+
+
     # Set up optimizers
     opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
-    if args.mode == "DA1":
+    if args.mode in ["DA1", "DA1_buf"]:
         opts["opt_cls"] = make_optimizer(ssd_model, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     else:
         opts["opt_t_enc"] = make_optimizer(target_encoder, args.adam_alpha, args.adam_beta1, args.adam_beta2)

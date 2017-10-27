@@ -238,4 +238,115 @@ class DA2_discriminator(Chain):
         h = F.leaky_relu(self.conv2(h))
         return h
 
+import random
+import numpy as np
+
+class fmapBuffer(object):
+    def __init__(self,bufsize,mode =0,discriminator=None,batchsize = 32,gpu = -1):  #mode 0:align src and tgt, 1:not align, 2:sort by loss value
+        self.bufsize = bufsize
+        self.buffer_src = []
+        self.buffer_tgt = []
+        self.mode = mode
+        self.discriminator = discriminator
+        self.loss_src = None
+        self.loss_tgt = None
+        self.batchsize = batchsize
+        self.gpu = gpu
+
+    def get_examples(self, n_samples):
+        if self.buffer_src == []:
+            n_return, src_samples, tgt_samples = 0, None, None
+        elif n_samples >= len(self.buffer_src):
+            n_return = len(self.buffer_src)
+            n_fmap = len(self.buffer_src[0])
+            src_samples = []
+            tgt_samples = []
+            for i in range(n_fmap):
+                src_samples.append(np.stack([x[i] for x in self.buffer_src]))
+                tgt_samples.append(np.stack([x[i] for x in self.buffer_tgt]))
+        else:
+            n_return = n_samples
+            if self.mode == 2:
+                indices_src = [x for x in range(n_samples)]
+                indices_tgt = indices_src
+            else:
+                indices_src = random.sample(range(len(self.buffer_src)), n_samples)
+                if self.mode == 0:
+                    indices_tgt = indices_src
+                else:
+                    indices_tgt = random.sample(range(len(self.buffer_tgt)), n_samples)
+            n_fmap = len(self.buffer_src[0])
+            src_samples = []
+            tgt_samples = []
+            for i in range(n_fmap):
+                src_samples.append(np.stack([self.buffer_src[x][i] for x in indices_src]))
+                tgt_samples.append(np.stack([self.buffer_tgt[x][i] for x in indices_tgt]))
+        return n_return, src_samples, tgt_samples
+
+    def set_examples(self, src_samples, tgt_samples):
+        n_samples = src_samples[0].shape[0]
+        if self.bufsize < n_samples:
+            print(self.__class__.__name__+"- set_example(): n_examples must not be larger than bufsize ")
+            raise ValueError
+        n_fmap = len(src_samples)
+        n_fmap_elements = src_samples[0].shape[2] * src_samples[0].shape[3]
+        if self.mode == 2:
+            for i in range(n_samples):
+                self.buffer_src.append([src_samples[x][i] for x in range(n_fmap)])
+                self.buffer_tgt.append([tgt_samples[x][i] for x in range(n_fmap)])
+            del src_samples
+            del tgt_samples
+            transfer_array = lambda x: chainer.cuda.to_gpu(x, device=self.gpu) if self.gpu >= 0 else lambda x: x
+            self.loss_src = None
+            self.loss_tgt = None
+            for i in range(int(len(self.buffer_src)/self.batchsize)+1):
+                src_examples_ = []
+                tgt_examples_ = []
+                for j in range(n_fmap):
+                    src_examples_.append(transfer_array(np.stack([x[j] for x in self.buffer_src[i*self.batchsize:(i+1)*self.batchsize]])))
+                    tgt_examples_.append(transfer_array(np.stack([x[j] for x in self.buffer_tgt[i * self.batchsize:(i + 1) * self.batchsize]])))
+                with chainer.no_backprop_mode():
+                    src_loss_ = chainer.cuda.to_cpu(F.sum(F.softplus(-self.discriminator(src_examples_)),axis=(1,2,3)).data) / n_fmap_elements
+                    tgt_loss_ = chainer.cuda.to_cpu(
+                        F.sum(F.softplus(self.discriminator(tgt_examples_)), axis=(1, 2, 3)).data) / n_fmap_elements
+                if self.loss_src == None:
+                    self.loss_src = src_loss_
+                    self.loss_tgt = tgt_loss_
+                else:
+                    self.loss_src = np.hstack((self.loss_src, src_loss_))
+                    self.loss_tgt = np.hstack((self.loss_tgt, tgt_loss_))
+            # self.buffer_src = sorted(self.buffer_src, key=lambda x: self.loss_src[self.buffer_src.index(x)],reverse=True)
+            # self.buffer_tgt = sorted(self.buffer_tgt, key=lambda x: self.loss_tgt[self.buffer_tgt.index(x)],reverse=True)
+            index_sorted_src = np.argsort(self.loss_src)[::-1]
+            index_sorted_tgt = np.argsort(self.loss_tgt)[::-1]
+            self.buffer_src = [self.buffer_src[x] for x in index_sorted_src]
+            self.buffer_tgt = [self.buffer_tgt[x] for x in index_sorted_tgt]
+            self.loss_src = np.sort(self.loss_src)[::-1]
+            self.loss_tgt = np.sort(self.loss_tgt)[::-1]
+            self.buffer_src = self.buffer_src[:self.bufsize]
+            self.buffer_tgt = self.buffer_tgt[:self.bufsize]
+            self.loss_src = self.loss_src[:self.bufsize]
+            self.loss_tgt = self.loss_tgt[:self.bufsize]
+        else:
+            n_room = self.bufsize - len(self.buffer_src)
+            if n_room >= n_samples:
+                for i in range(n_samples):
+                    self.buffer_src.append([src_samples[x][i] for x in range(n_fmap)])
+                    self.buffer_tgt.append([tgt_samples[x][i] for x in range(n_fmap)])
+            else:
+                indices_buf_src = random.sample(range(len(self.buffer_src)), n_samples - n_room)
+                if self.mode == 0:
+                    indices_tgt_src = indices_buf_src
+                else:
+                    indices_tgt_src = random.sample(range(len(self.buffer_tgt)), n_samples - n_room)
+                indices_samples = range(n_room,n_samples)
+                for i,j,k in zip(indices_buf_src,indices_tgt_src, indices_samples):
+                    self.buffer_src[i] = [src_samples[x][k] for x in range(n_fmap)]
+                    self.buffer_tgt[j] = [tgt_samples[x][k] for x in range(n_fmap)]
+                for i in range(n_room):
+                    self.buffer_src.append([src_samples[x][i] for x in range(n_fmap)])
+                    self.buffer_tgt.append([tgt_samples[x][i] for x in range(n_fmap)])
+
+
+
 
