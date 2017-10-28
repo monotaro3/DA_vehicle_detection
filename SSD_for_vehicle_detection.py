@@ -298,8 +298,6 @@ class fmapBuffer(object):
             del src_samples
             del tgt_samples
             transfer_array = lambda x: chainer.cuda.to_gpu(x, device=self.gpu) if self.gpu >= 0 else lambda x: x
-            self.loss_src = None
-            self.loss_tgt = None
             for i in range(int(math.ceil(len(self.buffer_src)/self.batchsize))):
                 src_examples_ = []
                 tgt_examples_ = []
@@ -310,7 +308,7 @@ class fmapBuffer(object):
                     src_loss_ = chainer.cuda.to_cpu(F.sum(F.softplus(-self.discriminator(src_examples_)),axis=(1,2,3)).data) / n_fmap_elements
                     tgt_loss_ = chainer.cuda.to_cpu(
                         F.sum(F.softplus(self.discriminator(tgt_examples_)), axis=(1, 2, 3)).data) / n_fmap_elements
-                if self.loss_src == None:
+                if i == 0:
                     self.loss_src = src_loss_
                     self.loss_tgt = tgt_loss_
                 else:
