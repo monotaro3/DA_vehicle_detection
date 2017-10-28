@@ -240,6 +240,7 @@ class DA2_discriminator(Chain):
 
 import random
 import numpy as np
+import math
 
 class fmapBuffer(object):
     def __init__(self,bufsize,mode =0,discriminator=None,batchsize = 32,gpu = -1):  #mode 0:align src and tgt, 1:not align, 2:sort by loss value
@@ -299,7 +300,7 @@ class fmapBuffer(object):
             transfer_array = lambda x: chainer.cuda.to_gpu(x, device=self.gpu) if self.gpu >= 0 else lambda x: x
             self.loss_src = None
             self.loss_tgt = None
-            for i in range(int(len(self.buffer_src)/self.batchsize)+1):
+            for i in range(int(math.ceil(len(self.buffer_src)/self.batchsize))):
                 src_examples_ = []
                 tgt_examples_ = []
                 for j in range(n_fmap):
