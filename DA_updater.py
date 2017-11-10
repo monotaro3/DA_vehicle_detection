@@ -238,14 +238,22 @@ class DA_updater1_buf(chainer.training.StandardUpdater):
         y_source = self.dis(src_fmap)
 
         #size, e_buf_tgt = self.buf_tgt.get_examples(use_bufsize)
-        if size > 0:
-            tgt_fmap = self.t_enc(Variable(xp.array(batch_target[0:batchsize-size])))
-            for i in range(len(tgt_fmap)):
-                tgt_fmap[i] = F.vstack([tgt_fmap[i],Variable(func_bGPU(e_buf_tgt[i]))])
-        else:
-            tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        # if size > 0:
+        #     tgt_fmap = self.t_enc(Variable(xp.array(batch_target[0:batchsize-size])))
+        #     for i in range(len(tgt_fmap)):
+        #         tgt_fmap[i] = F.vstack([tgt_fmap[i],Variable(func_bGPU(e_buf_tgt[i]))])
+        # else:
+        #     tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        tgt_fmap_dis = []
+        for i in range(len(tgt_fmap)):
+            tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.device))
+            tgt_fmap_dis[i].unchain_backward()
+            if size > 0:
+                tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i]))])
 
-        y_target = self.dis(tgt_fmap)
+        y_target = self.dis(tgt_fmap_dis)
+        y_target_enc = self.dis(tgt_fmap)
 
         n_fmap_elements = y_target.shape[2]*y_target.shape[3]
 
@@ -253,7 +261,7 @@ class DA_updater1_buf(chainer.training.StandardUpdater):
         loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
         loss_dis = loss_dis_src + loss_dis_tgt
 
-        loss_t_enc = F.sum(F.softplus(-y_target)) / n_fmap_elements / (batchsize - size)
+        loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
 
         #update cls(and t_enc) by cls_loss and loss_t_enc
         loss_t_enc.backward()
@@ -279,6 +287,136 @@ class DA_updater1_buf(chainer.training.StandardUpdater):
                 src_fmap[i] = chainer.cuda.to_cpu(src_fmap[i].data)
                 tgt_fmap[i] = chainer.cuda.to_cpu(tgt_fmap[i].data)
         self.buf.set_examples(src_fmap,tgt_fmap)
+
+class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for experiments
+    def __init__(self, *args, **kwargs):
+        self.dis, self.cls = kwargs.pop('models')
+        self.buf = kwargs.pop('buffer')
+        super(DA_updater1_buf_x4, self).__init__(*args, **kwargs)
+        self.t_enc = self.cls.extractor
+        self.alpha = 1
+        self.k = 3
+
+    def update_core(self):
+        #t_enc_optimizer = self.get_optimizer('opt_t_enc')
+        dis_optimizer = self.get_optimizer('opt_dis')
+        cls_optimizer = self.get_optimizer('opt_cls')
+        xp = self.dis.xp
+
+        batch_source = self.get_iterator('main').next()
+        batch_source_array = convert.concat_examples(batch_source,self.device)
+        #batch_target = self.get_iterator('target').next()
+        batchsize = len(batch_source)
+        use_bufsize = int(batchsize*2) ##
+
+        #compute forwarding with source data
+        src_fmap = self.t_enc(batch_source_array[0]) #src feature map
+        mb_locs, mb_confs = self.cls.multibox(src_fmap)
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, batch_source_array[1], batch_source_array[2], self.k)
+        cls_loss = loc_loss * self.alpha + conf_loss #cls loss
+        self.cls.cleargrads()
+        cls_loss.backward()
+        cls_loss.unchain_backward()
+
+        # for i in range(len(src_fmap)):
+        #     src_fmap[i] = src_fmap[i].data
+
+        func_bGPU = lambda x: chainer.cuda.to_gpu(x, device=self.device) if self.device >= 0 else lambda x: x
+
+        size = 0
+        if batchsize >= 2:
+            size, e_buf_src , e_buf_tgt = self.buf.get_examples(use_bufsize)
+            # if size != 0:
+            #     for i in range(len(src_fmap)):
+            #         #src_fmap[i] = Variable(xp.vstack((src_fmap[i][0:batchsize - size], func_bGPU(e_buf_src[i]))))
+            #         src_fmap[i] = F.vstack((src_fmap[i][0:batchsize - size], Variable(func_bGPU(e_buf_src[i]))))
+        size_quat = int(size/4)
+
+        cls_loss_report = cls_loss.data
+        loss_t_enc_report = 0
+        loss_dis_report = 0
+        loss_dis_src_report = 0
+        loss_dis_tgt_report = 0
+
+        for i in range(4):
+            if i != 0:
+                batch_source = self.get_iterator('main').next()
+                batch_source_array = convert.concat_examples(batch_source, self.device)
+                with chainer.no_backprop_mode():
+                    src_fmap = self.t_enc(batch_source_array[0])
+            if size_quat > 0:
+                for j in range(len(src_fmap)):
+                    src_fmap[j] = F.vstack((src_fmap[j][0:batchsize - size_quat], Variable(func_bGPU(e_buf_src[j][size_quat*i:size_quat*(i+1)]))))
+            y_source = self.dis(src_fmap)
+
+        #size, e_buf_tgt = self.buf_tgt.get_examples(use_bufsize)
+        # if size > 0:
+        #     tgt_fmap = self.t_enc(Variable(xp.array(batch_target[0:batchsize-size])))
+        #     for i in range(len(tgt_fmap)):
+        #         tgt_fmap[i] = F.vstack([tgt_fmap[i],Variable(func_bGPU(e_buf_tgt[i]))])
+        # else:
+        #     tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+            batch_target = self.get_iterator('target').next()
+            tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+            tgt_fmap_dis = []
+            for j in range(len(tgt_fmap)):
+                tgt_fmap_dis.append(F.copy(tgt_fmap[j][0:batchsize-size_quat],self.device))
+                tgt_fmap_dis[j].unchain_backward()
+                if size_quat > 0:
+                    tgt_fmap_dis[j] = F.vstack([tgt_fmap_dis[j], Variable(func_bGPU(e_buf_tgt[j][size_quat*i:size_quat*(i+1)]))])
+
+            y_target = self.dis(tgt_fmap_dis)
+            y_target_enc = self.dis(tgt_fmap)
+
+            n_fmap_elements = y_target.shape[2]*y_target.shape[3]
+
+            loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize / 4
+            loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize / 4
+            loss_dis = loss_dis_src + loss_dis_tgt
+
+            loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize / 4
+
+            #update cls(and t_enc) by cls_loss and loss_t_enc
+            loss_t_enc.backward()
+            #cls_optimizer.update()
+            for s_map, t_map  in zip(src_fmap, tgt_fmap):
+                 s_map.unchain_backward()
+                 t_map.unchain_backward()
+
+            self.dis.cleargrads()
+            loss_dis.backward()
+            #dis_optimizer.update()
+
+            loss_t_enc_report += loss_t_enc.data
+            loss_dis_report += loss_dis.data
+            loss_dis_src_report += loss_dis_src.data
+            loss_dis_tgt_report += loss_dis_tgt.data
+
+            with chainer.no_backprop_mode():
+                src_fmap = self.t_enc(batch_source_array[0][-size_quat:])
+                tgt_fmap = self.t_enc(xp.array(batch_target[-size_quat:]))
+                for j in range(len(src_fmap)):
+                    src_fmap[j] = chainer.cuda.to_cpu(src_fmap[j].data)
+                    tgt_fmap[j] = chainer.cuda.to_cpu(tgt_fmap[j].data)
+            if i == 0:
+                buf_src_fmap = src_fmap
+                buf_tgt_fmap = tgt_fmap
+            else:
+                for j in range(len(src_fmap)):
+                    buf_src_fmap[j] = np.vstack((buf_src_fmap[j],src_fmap[j]))
+                    buf_tgt_fmap[j] = np.vstack((buf_tgt_fmap[j], tgt_fmap[j]))
+
+        cls_optimizer.update()
+        dis_optimizer.update()
+
+        chainer.reporter.report({'loss_t_enc': loss_t_enc_report})
+        chainer.reporter.report({'loss_dis': loss_dis_report})
+        chainer.reporter.report({'loss_cls': cls_loss_report})
+        chainer.reporter.report({'loss_dis_src': loss_dis_src_report})
+        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt_report})
+
+        self.buf.set_examples(buf_src_fmap,buf_tgt_fmap)
 
 
 
