@@ -7,7 +7,7 @@ import numpy as np
 import chainer
 from chainer.datasets import TransformDataset
 from chainer.optimizer import WeightDecay
-from chainer import serializers
+from chainer import serializers, reporter
 from chainer import training, Variable
 from chainer import functions as F
 from chainer.training import extensions
@@ -22,6 +22,8 @@ from chainercv.links.model.ssd import multibox_loss
 from chainercv.links import SSD300
 from chainercv.links import SSD512
 from chainercv import transforms
+from chainercv.evaluations import eval_detection_voc
+from chainercv.utils import apply_prediction_to_iterator
 
 from chainercv.links.model.ssd import random_crop_with_bbox_constraints
 from chainercv.links.model.ssd import random_distort
@@ -85,6 +87,7 @@ class Multibox_CORAL_loss(chainer.Chain):
         self.k = k
         self.CORAL_calculation = CORAL_calculation
         self.CORAL_weight = CORAL_weight
+        self.extractor = self.model.extractor
 
     def __call__(self, s_imgs, gt_mb_locs, gt_mb_labels, t_imgs):
         # mb_locs, mb_confs = self.model(s_imgs)
@@ -92,13 +95,13 @@ class Multibox_CORAL_loss(chainer.Chain):
         #     mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
         # loss = loc_loss * self.alpha + conf_loss
 
-        src_fmap = self.t_enc(s_imgs)  # src feature map
-        mb_locs, mb_confs = self.cls.multibox(src_fmap)
+        src_fmap = self.extractor(s_imgs)  # src feature map
+        mb_locs, mb_confs = self.model.multibox(src_fmap)
         loc_loss, conf_loss = multibox_loss(
             mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
         cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
 
-        tgt_fmap = self.t_enc(t_imgs)
+        tgt_fmap = self.extractor(t_imgs)
         src_examples = src_fmap[0]
         tgt_examples = tgt_fmap[0]
         n_data, c, w, h = src_examples.shape
@@ -108,6 +111,7 @@ class Multibox_CORAL_loss(chainer.Chain):
             src_examples = F.reshape(src_examples,(n_data*w*h, c))
             tgt_examples = F.transpose(tgt_examples, axes=(0, 2, 3, 1))
             tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c))
+            n_data = n_data * w * h
         elif self.CORAL_calculation == 1:
             src_examples = F.im2col(src_examples,3,1,1)
             src_examples = F.reshape(src_examples,(n_data,c,3*3,w,h))
@@ -117,6 +121,7 @@ class Multibox_CORAL_loss(chainer.Chain):
             tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
             tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
             tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
+            n_data = n_data * w * h
         else:
             src_examples = F.reshape(src_examples, (n_data,-1))
             tgt_examples = F.reshape(tgt_examples, (n_data, -1))
@@ -137,69 +142,29 @@ class Multibox_CORAL_loss(chainer.Chain):
 
 class Updater_CORAL(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
-        self.dis, self.cls = kwargs.pop('models')
+        #self.loss_func = kwargs.pop('lossfunc')
         super(Updater_CORAL, self).__init__(*args, **kwargs)
-        self.t_enc = self.cls.extractor
-        self.alpha = 1
-        self.k = 3
+        # self.t_enc = self.cls.extractor
+        # self.alpha = 1
+        # self.k = 3
 
     def update_core(self):
         #t_enc_optimizer = self.get_optimizer('opt_t_enc')
-        dis_optimizer = self.get_optimizer('opt_dis')
-        cls_optimizer = self.get_optimizer('opt_cls')
-        xp = self.dis.xp
+        optimizer = self.get_optimizer('main')
+        xp = self.loss_func.xp
 
         batch_source = self.get_iterator('main').next()
         batch_source_array = convert.concat_examples(batch_source,self.device)
         batch_target = self.get_iterator('target').next()
         batchsize = len(batch_source)
 
-        #compute forwarding with source data
-        src_fmap = self.t_enc(batch_source_array[0]) #src feature map
-        mb_locs, mb_confs = self.cls.multibox(src_fmap)
-        loc_loss, conf_loss = multibox_loss(
-            mb_locs, mb_confs, batch_source_array[1], batch_source_array[2], self.k)
-        cls_loss = loc_loss * self.alpha + conf_loss #cls loss
+        if self.device >=0: batch_target = chainer.cuda.to_gpu(batch_target,self.device)
+        #compute loss
+        loss = self.loss_func(batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target)
 
-        y_source = self.dis(src_fmap)
-
-        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
-        y_target = self.dis(tgt_fmap)
-
-        n_fmap_elements = y_target.shape[2]*y_target.shape[3]
-
-        # z = Variable(xp.asarray(self.gen.make_hidden(batchsize)))
-        # x_fake = self.gen(z)
-        # y_fake = self.dis(x_fake)
-
-        # loss_dis = F.sum(F.softplus(-y_real)) / batchsize
-        # loss_dis += F.sum(F.softplus(y_fake)) / batchsize
-        loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
-        loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
-        #loss_dis = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
-        #loss_dis += F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
-        loss_dis = loss_dis_src + loss_dis_tgt
-
-        loss_t_enc = F.sum(F.softplus(-y_target)) / n_fmap_elements / batchsize
-
-        #update cls(and t_enc) by cls_loss and loss_t_enc
-        self.cls.cleargrads()
-        cls_loss.backward()
-        loss_t_enc.backward()
-        cls_optimizer.update()
-        for s_map, t_map  in zip(src_fmap, tgt_fmap):
-             s_map.unchain_backward()
-             t_map.unchain_backward()
-
-        self.dis.cleargrads()
-        loss_dis.backward()
-        dis_optimizer.update()
-
-        chainer.reporter.report({'loss_t_enc': loss_t_enc})
-        chainer.reporter.report({'loss_dis': loss_dis})
-        chainer.reporter.report({'loss_cls': cls_loss})
-        chainer.reporter.report({'loss_dis_src': loss_dis_src})
-        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
+        self.loss_func.model.cleargrads()
+        loss.backward()
+        optimizer.update()
 
 
 
@@ -258,6 +223,66 @@ class Transform(object):
 
         return img, mb_loc, mb_label
 
+class CORAL_evaluator(chainer.training.extensions.Evaluator):
+    trigger = 1, 'epoch'
+    default_name = 'validation'
+    priority = chainer.training.PRIORITY_WRITER
+    def __init__(self,src_iter,model, use_07_metric,label_names, target_eval_args,eval_doc_iter,eval_tgt_iter):
+        super(CORAL_evaluator, self).__init__(
+            None, None)
+        #self.voc_evaluator = DetectionVOCEvaluator(**voc_args)
+        from SSD_test import ssd_evaluator
+        self.tgt_evaluator = ssd_evaluator(**target_eval_args)
+        self.updater = target_eval_args["updater"]
+        self.eval_doc_iter = eval_doc_iter
+        self.eval_tgt_iter = eval_tgt_iter
+        self.src_iter = src_iter
+        self.target = model
+        self.use_07_metric = use_07_metric
+        self.label_names = label_names
+
+    def evaluate(self):
+        observation = self.tgt_evaluator.evaluate()
+
+        #evaluate in source domain
+        if self.updater.iteration % self.eval_doc_iter == 0:
+            if hasattr(self.src_iter, 'reset'):
+                self.src_iter.reset()
+                it = self.src_iter
+            else:
+                it = copy.copy(self.src_iter)
+
+            imgs, pred_values, gt_values = apply_prediction_to_iterator(
+                self.target.predict, it)
+            # delete unused iterator explicitly
+            del imgs
+
+            pred_bboxes, pred_labels, pred_scores = pred_values
+
+            if len(gt_values) == 3:
+                gt_bboxes, gt_labels, gt_difficults = gt_values
+            elif len(gt_values) == 2:
+                gt_bboxes, gt_labels = gt_values
+                gt_difficults = None
+
+            result = eval_detection_voc(
+                pred_bboxes, pred_labels, pred_scores,
+                gt_bboxes, gt_labels, gt_difficults,
+                use_07_metric=self.use_07_metric)
+
+            report = {'s_map': result['s_map']}
+
+            if self.label_names is not None:
+                for l, label_name in enumerate(self.label_names):
+                    try:
+                        report['s_ap/{:s}'.format(label_name)] = result['ap'][l]
+                    except IndexError:
+                        report['s_ap/{:s}'.format(label_name)] = np.nan
+            with reporter.report_scope(observation):
+                reporter.report(report, self.target)
+        return observation
+
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -271,10 +296,14 @@ def main():
     parser.add_argument('--snapshot_interval', type=int)
     parser.add_argument('--eval_interval', type=int)
     parser.add_argument('--resume')
+    parser.add_argument('--iteration', type = int)
+    parser.add_argument('--lrdecay_itr', type=int, nargs = 2, default = [40000,50000])
     parser.add_argument('--model_init')
     parser.add_argument('--datadir')
     parser.add_argument('--DA_data')
     parser.add_argument('--DA_valdata')
+    parser.add_argument('--eval_src_itr', type = int)
+    parser.add_argument('--eval_tgt_itr', type = int)
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
     parser.add_argument('--opt_mode',type=str,choices = ("Adam","MomentumSGD"))
     parser.add_argument('--CORAL_calculation', type=int, choices=(0,1,2)) # 0:pixelwise, 1:patchwise, 2:fmapwise
@@ -357,20 +386,26 @@ def main():
         "device": args.gpu
     }
     updater_args["optimizer"] = optimizer
-    updater_args["lossfunc"] = train_chain
+    updater_args["loss_func"] = train_chain
 
     #updater = training.StandardUpdater(train_iter, optimizer, device=gpu)
     updater = Updater_CORAL(**updater_args)
-    trainer = training.Trainer(updater, (120000, 'iteration'), out)
+    trainer = training.Trainer(updater, (args.iteration, 'iteration'), out)
     if args.opt_mode == "MomentumSGD":
         trainer.extend(
             extensions.ExponentialShift('lr', 0.1, init=1e-3),
-            trigger=triggers.ManualScheduleTrigger([80000, 100000], 'iteration'))
+            trigger=triggers.ManualScheduleTrigger([args.lrdecay_iter[0], args.lrdecay_iter[1]], 'iteration'))
+
+    args.DA_valdata
+
+    import os
+    tgt_eval_args = {"img_dir" : args.DA_valdata, "target":model,"updater":updater, "savedir":os.path.join(args.out,"bestshot"),
+                     "resolution": 0.3, "modelsize": "ssd300", "evalonly": True, "label_names": vehicle_classes,
+                     "save_bottom": 0.6}
 
     trainer.extend(
-        DetectionVOCEvaluator(
-            test_iter, model, use_07_metric=True,
-            label_names=vehicle_classes),
+        CORAL_evaluator(
+            test_iter, model, True, vehicle_classes,tgt_eval_args,args.eval_src_itr,args.eval_tgt_itr),
         trigger=(10000, 'iteration'))
 
     log_interval = 10, 'iteration'
@@ -378,23 +413,23 @@ def main():
     trainer.extend(extensions.observe_lr(), trigger=log_interval)
     trainer.extend(extensions.PrintReport(
         ['epoch', 'iteration', 'lr',
-         'main/loss', 'main/loss/loc', 'main/loss/conf',
-         'validation/main/map']),
+         'main/loss','main/cls_loss', 'main/loss/loc', 'main/loss/conf' 'main/CORAL_loss_weighted',
+         'validation/main/s_map','validation/main/map','validation/main/F1/car']),
         trigger=log_interval)
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
-    trainer.extend(extensions.snapshot(), trigger=(1000, 'iteration'))
+    trainer.extend(extensions.snapshot(), trigger=(args.snapshot_interval, 'iteration'))
     trainer.extend(
         extensions.snapshot_object(model, 'model_iter_{.updater.iteration}'),
-        trigger=(120000, 'iteration'))
+        trigger=(args.iteration, 'iteration'))
 
     if resume:
         serializers.load_npz(resume, trainer)
 
-    serializers.load_npz("model/snapshot_iter_300_0.16_55000", trainer)
-    serializers.save_npz("model/ssd_300_0.16_55000",trainer.updater._optimizers["main"].target.model)
+    # serializers.load_npz("model/snapshot_iter_300_0.16_55000", trainer)
+    # serializers.save_npz("model/ssd_300_0.16_55000",trainer.updater._optimizers["main"].target.model)
 
-    #trainer.run()
+    trainer.run()
 
     exectime = time.time() - exectime
     exectime_str = gen_dms_time_str(exectime)
