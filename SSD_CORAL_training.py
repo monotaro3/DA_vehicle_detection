@@ -12,6 +12,7 @@ from chainer import training, Variable
 from chainer import functions as F
 from chainer.training import extensions
 from chainer.training import triggers
+from chainer.dataset import convert
 
 from chainercv.datasets import voc_detection_label_names
 from chainercv.datasets import VOCDetectionDataset
@@ -57,9 +58,6 @@ def initSSD(modelname,resolution,path=None):
         serializers.load_npz(path, model)
     return model
 
-
-
-
 class ConcatenatedDataset(chainer.dataset.DatasetMixin):
 
     def __init__(self, *datasets):
@@ -76,28 +74,6 @@ class ConcatenatedDataset(chainer.dataset.DatasetMixin):
                 return dataset[i]
             i -= len(dataset)
         raise IndexError
-
-
-# class MultiboxTrainChain(chainer.Chain):
-#
-#     def __init__(self, model, alpha=1, k=3):
-#         super(MultiboxTrainChain, self).__init__()
-#         with self.init_scope():
-#             self.model = model
-#         self.alpha = alpha
-#         self.k = k
-#
-#     def __call__(self, imgs, gt_mb_locs, gt_mb_labels):
-#         mb_locs, mb_confs = self.model(imgs)
-#         loc_loss, conf_loss = multibox_loss(
-#             mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
-#         loss = loc_loss * self.alpha + conf_loss
-#
-#         chainer.reporter.report(
-#             {'loss': loss, 'loss/loc': loc_loss, 'loss/conf': conf_loss},
-#             self)
-#
-#         return loss
 
 class Multibox_CORAL_loss(chainer.Chain):
 
@@ -158,6 +134,73 @@ class Multibox_CORAL_loss(chainer.Chain):
             self)
 
         return loss
+
+class Updater_CORAL(chainer.training.StandardUpdater):
+    def __init__(self, *args, **kwargs):
+        self.dis, self.cls = kwargs.pop('models')
+        super(Updater_CORAL, self).__init__(*args, **kwargs)
+        self.t_enc = self.cls.extractor
+        self.alpha = 1
+        self.k = 3
+
+    def update_core(self):
+        #t_enc_optimizer = self.get_optimizer('opt_t_enc')
+        dis_optimizer = self.get_optimizer('opt_dis')
+        cls_optimizer = self.get_optimizer('opt_cls')
+        xp = self.dis.xp
+
+        batch_source = self.get_iterator('main').next()
+        batch_source_array = convert.concat_examples(batch_source,self.device)
+        batch_target = self.get_iterator('target').next()
+        batchsize = len(batch_source)
+
+        #compute forwarding with source data
+        src_fmap = self.t_enc(batch_source_array[0]) #src feature map
+        mb_locs, mb_confs = self.cls.multibox(src_fmap)
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, batch_source_array[1], batch_source_array[2], self.k)
+        cls_loss = loc_loss * self.alpha + conf_loss #cls loss
+
+        y_source = self.dis(src_fmap)
+
+        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        y_target = self.dis(tgt_fmap)
+
+        n_fmap_elements = y_target.shape[2]*y_target.shape[3]
+
+        # z = Variable(xp.asarray(self.gen.make_hidden(batchsize)))
+        # x_fake = self.gen(z)
+        # y_fake = self.dis(x_fake)
+
+        # loss_dis = F.sum(F.softplus(-y_real)) / batchsize
+        # loss_dis += F.sum(F.softplus(y_fake)) / batchsize
+        loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+        loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+        #loss_dis = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+        #loss_dis += F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+        loss_dis = loss_dis_src + loss_dis_tgt
+
+        loss_t_enc = F.sum(F.softplus(-y_target)) / n_fmap_elements / batchsize
+
+        #update cls(and t_enc) by cls_loss and loss_t_enc
+        self.cls.cleargrads()
+        cls_loss.backward()
+        loss_t_enc.backward()
+        cls_optimizer.update()
+        for s_map, t_map  in zip(src_fmap, tgt_fmap):
+             s_map.unchain_backward()
+             t_map.unchain_backward()
+
+        self.dis.cleargrads()
+        loss_dis.backward()
+        dis_optimizer.update()
+
+        chainer.reporter.report({'loss_t_enc': loss_t_enc})
+        chainer.reporter.report({'loss_dis': loss_dis})
+        chainer.reporter.report({'loss_cls': cls_loss})
+        chainer.reporter.report({'loss_dis_src': loss_dis_src})
+        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
+
 
 
 class Transform(object):
@@ -290,22 +333,36 @@ def main():
     #     year='2007', split='test',
     #     use_difficult=True, return_difficult=True)
     test = COWC_dataset_processed(split="validation",datadir=args.datadir)
-    test_iter = chainer.iterators.SerialIterator(
+    test_iter = chainer.iterators.MultiprocessIterator(
         test, batchsize, repeat=False, shuffle=False)
 
+    target_dataset = Dataset_imgonly(args.DA_data)
+    target_iter = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
+
     # initial lr is set to 1e-3 by ExponentialShift
-    optimizer = chainer.optimizers.MomentumSGD()
+    if args.opt_mode == "MomentumSGD":
+        optimizer = chainer.optimizers.MomentumSGD()
+    elif args.opt_mode == "Adam":
+        optimizer = chainer.optimizers.Adam()
     optimizer.setup(train_chain)
-    if args.opt_mode == "Momentum_SGD":
+    if args.opt_mode == "MomentumSGD":
         for param in train_chain.params():
             if param.name == 'b':
                 param.update_rule.add_hook(GradientScaling(2))
             else:
                 param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
-    updater = training.StandardUpdater(train_iter, optimizer, device=gpu)
+    updater_args = updater_args = {
+        "iterator": {'main': train_iter, 'target': target_iter, },
+        "device": args.gpu
+    }
+    updater_args["optimizer"] = optimizer
+    updater_args["lossfunc"] = train_chain
+
+    #updater = training.StandardUpdater(train_iter, optimizer, device=gpu)
+    updater = Updater_CORAL(**updater_args)
     trainer = training.Trainer(updater, (120000, 'iteration'), out)
-    if args.opt_mode == "Momentum_SGD":
+    if args.opt_mode == "MomentumSGD":
         trainer.extend(
             extensions.ExponentialShift('lr', 0.1, init=1e-3),
             trigger=triggers.ManualScheduleTrigger([80000, 100000], 'iteration'))
