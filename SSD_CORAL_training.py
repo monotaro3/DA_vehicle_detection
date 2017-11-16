@@ -100,9 +100,10 @@ class Multibox_CORAL_loss(chainer.Chain):
         loc_loss, conf_loss = multibox_loss(
             mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
         cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
+        batchsize_tgt = len(t_imgs)
 
         tgt_fmap = self.extractor(t_imgs)
-        src_examples = src_fmap[0]
+        src_examples = src_fmap[0][:batchsize_tgt]
         tgt_examples = tgt_fmap[0]
         n_data, c, w, h = src_examples.shape
 
@@ -295,6 +296,7 @@ def main():
     parser.add_argument(
         '--resolution', type=float, choices=(0.15,0.16,0.3), default=0.15)
     parser.add_argument('--batchsize', type=int, default=32)
+    parser.add_argument('--batchsize_tgt', type=int)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
     parser.add_argument('--snapshot_interval', type=int)
@@ -373,7 +375,7 @@ def main():
         test, batchsize, repeat=False, shuffle=False)
 
     target_dataset = Dataset_imgonly(args.DA_data)
-    target_iter = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
+    target_iter = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize_tgt)
 
     # initial lr is set to 1e-3 by ExponentialShift
     if args.opt_mode == "MomentumSGD":
