@@ -125,12 +125,14 @@ class Multibox_CORAL_loss(chainer.Chain):
         else:
             src_examples = F.reshape(src_examples, (n_data,-1))
             tgt_examples = F.reshape(tgt_examples, (n_data, -1))
-        _s_tempmat = F.matmul(Variable(np.ones(n_data)),src_examples)
-        _t_tempmat = F.matmul(Variable(np.ones(n_data)), tgt_examples)
+        xp = self.model.xp
+        colvec_1 = xp.ones((1,n_data),dtype=np.float32)
+        _s_tempmat = F.matmul(Variable(colvec_1),src_examples)
+        _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
         s_cov_mat = (F.matmul(F.transpose(src_examples),src_examples) - F.matmul(F.transpose(_s_tempmat),_s_tempmat) / n_data) / n_data -1 if n_data > 1 else 1
         t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
                                                                                   _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
-        CORAL_loss = F.sum(F.squared_error(s_cov_mat - t_cov_mat))
+        CORAL_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat))
 
         loss = cls_loss + CORAL_loss * self.CORAL_weight
 
@@ -155,7 +157,7 @@ class Updater_CORAL(chainer.training.StandardUpdater):
 
         batch_source = self.get_iterator('main').next()
         batch_source_array = convert.concat_examples(batch_source,self.device)
-        batch_target = self.get_iterator('target').next()
+        batch_target = xp.array(self.get_iterator('target').next())
         batchsize = len(batch_source)
 
         if self.device >=0: batch_target = chainer.cuda.to_gpu(batch_target,self.device)
@@ -165,8 +167,6 @@ class Updater_CORAL(chainer.training.StandardUpdater):
         self.loss_func.model.cleargrads()
         loss.backward()
         optimizer.update()
-
-
 
 class Transform(object):
 
@@ -229,7 +229,7 @@ class CORAL_evaluator(chainer.training.extensions.Evaluator):
     priority = chainer.training.PRIORITY_WRITER
     def __init__(self,src_iter,model, use_07_metric,label_names, target_eval_args,eval_doc_iter,eval_tgt_iter):
         super(CORAL_evaluator, self).__init__(
-            None, None)
+            None, model)
         #self.voc_evaluator = DetectionVOCEvaluator(**voc_args)
         from SSD_test import ssd_evaluator
         self.tgt_evaluator = ssd_evaluator(**target_eval_args)
@@ -237,11 +237,12 @@ class CORAL_evaluator(chainer.training.extensions.Evaluator):
         self.eval_doc_iter = eval_doc_iter
         self.eval_tgt_iter = eval_tgt_iter
         self.src_iter = src_iter
-        self.target = model
+        #self.target = model
         self.use_07_metric = use_07_metric
         self.label_names = label_names
 
     def evaluate(self):
+        target = self._targets['main']
         observation = self.tgt_evaluator.evaluate()
 
         #evaluate in source domain
@@ -253,7 +254,7 @@ class CORAL_evaluator(chainer.training.extensions.Evaluator):
                 it = copy.copy(self.src_iter)
 
             imgs, pred_values, gt_values = apply_prediction_to_iterator(
-                self.target.predict, it)
+                target.predict, it)
             # delete unused iterator explicitly
             del imgs
 
@@ -294,7 +295,6 @@ def main():
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
     parser.add_argument('--snapshot_interval', type=int)
-    parser.add_argument('--eval_interval', type=int)
     parser.add_argument('--resume')
     parser.add_argument('--iteration', type = int)
     parser.add_argument('--lrdecay_itr', type=int, nargs = 2, default = [40000,50000])
@@ -315,6 +315,10 @@ def main():
     gpu = args.gpu
     out = args.out
     resume = args.resume
+
+    if not (args.eval_src_itr >= args.eval_tgt_itr and args.eval_src_itr % args.eval_tgt_itr == 0):
+        print('eval_src_iter must not be smaller than eval_tgt_iter and must be a multiple of eval_tgt_iter')
+        exit(0)
 
     exectime = time.time()
 
@@ -381,7 +385,7 @@ def main():
             else:
                 param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
-    updater_args = updater_args = {
+    updater_args = {
         "iterator": {'main': train_iter, 'target': target_iter, },
         "device": args.gpu
     }
@@ -394,26 +398,39 @@ def main():
     if args.opt_mode == "MomentumSGD":
         trainer.extend(
             extensions.ExponentialShift('lr', 0.1, init=1e-3),
-            trigger=triggers.ManualScheduleTrigger([args.lrdecay_iter[0], args.lrdecay_iter[1]], 'iteration'))
-
-    args.DA_valdata
+            trigger=triggers.ManualScheduleTrigger([args.lrdecay_itr[0], args.lrdecay_itr[1]], 'iteration'))
 
     import os
     tgt_eval_args = {"img_dir" : args.DA_valdata, "target":model,"updater":updater, "savedir":os.path.join(args.out,"bestshot"),
                      "resolution": 0.3, "modelsize": "ssd300", "evalonly": True, "label_names": vehicle_classes,
                      "save_bottom": 0.6}
 
+    # trainer.extend(
+    #     CORAL_evaluator(
+    #         test_iter, model, True, vehicle_classes,tgt_eval_args,args.eval_src_itr,args.eval_tgt_itr),
+    #     trigger=(args.eval_tgt_itr, 'iteration'))
+
     trainer.extend(
-        CORAL_evaluator(
-            test_iter, model, True, vehicle_classes,tgt_eval_args,args.eval_src_itr,args.eval_tgt_itr),
-        trigger=(10000, 'iteration'))
+        DetectionVOCEvaluator(
+            test_iter, model, use_07_metric=True,
+            label_names=vehicle_classes),
+        trigger=(args.eval_src_itr, 'iteration'))
+
+    bestshot_dir = os.path.join(args.out,"bestshot")
+    if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
+
+    from SSD_test import ssd_evaluator
+    trainer.extend(
+        ssd_evaluator(
+            args.DA_valdata, model, updater, savedir=bestshot_dir, label_names=vehicle_classes),
+        trigger=(args.eval_tgt_itr, 'iteration'))
 
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
     trainer.extend(extensions.observe_lr(), trigger=log_interval)
     trainer.extend(extensions.PrintReport(
         ['epoch', 'iteration', 'lr',
-         'main/loss','main/cls_loss', 'main/loss/loc', 'main/loss/conf' 'main/CORAL_loss_weighted',
+         'main/loss','main/cls_loss', 'main/loss/loc', 'main/loss/conf', 'main/CORAL_loss_weighted',
          'validation/main/s_map','validation/main/map','validation/main/F1/car']),
         trigger=log_interval)
     trainer.extend(extensions.ProgressBar(update_interval=10))
