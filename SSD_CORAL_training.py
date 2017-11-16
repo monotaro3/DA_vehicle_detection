@@ -296,7 +296,7 @@ def main():
     parser.add_argument(
         '--resolution', type=float, choices=(0.15,0.16,0.3), default=0.15)
     parser.add_argument('--batchsize', type=int, default=32)
-    parser.add_argument('--batchsize_tgt', type=int)
+    parser.add_argument('--batchsize_tgt', type=int, default=32)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
     parser.add_argument('--snapshot_interval', type=int)
