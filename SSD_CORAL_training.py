@@ -112,6 +112,7 @@ class Multibox_CORAL_loss(chainer.Chain):
             tgt_examples = F.transpose(tgt_examples, axes=(0, 2, 3, 1))
             tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c))
             n_data = n_data * w * h
+            norm_coef = 1 / (4 * c**2)
         elif self.CORAL_calculation == 1:
             src_examples = F.im2col(src_examples,3,1,1)
             src_examples = F.reshape(src_examples,(n_data,c,3*3,w,h))
@@ -122,9 +123,11 @@ class Multibox_CORAL_loss(chainer.Chain):
             tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
             tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
             n_data = n_data * w * h
+            norm_coef = 1 / (4 * (c * 3 * 3)**2)
         else:
             src_examples = F.reshape(src_examples, (n_data,-1))
             tgt_examples = F.reshape(tgt_examples, (n_data, -1))
+            norm_coef = 1 / (4 * (c * w * h) ** 2)
         xp = self.model.xp
         colvec_1 = xp.ones((1,n_data),dtype=np.float32)
         _s_tempmat = F.matmul(Variable(colvec_1),src_examples)
@@ -132,7 +135,7 @@ class Multibox_CORAL_loss(chainer.Chain):
         s_cov_mat = (F.matmul(F.transpose(src_examples),src_examples) - F.matmul(F.transpose(_s_tempmat),_s_tempmat) / n_data) / n_data -1 if n_data > 1 else 1
         t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
                                                                                   _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
-        CORAL_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat))
+        CORAL_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef
 
         loss = cls_loss + CORAL_loss * self.CORAL_weight
 
