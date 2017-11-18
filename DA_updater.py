@@ -466,7 +466,7 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
             src_fmap_dis = []
             for i in range(len(src_fmap)):
                 #src_fmap[i] = Variable(xp.vstack((src_fmap[i][0:batchsize - size], func_bGPU(e_buf_src[i]))))
-                src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size]), Variable(func_bGPU(e_buf_src[i])))))
+                src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.device), Variable(func_bGPU(e_buf_src[i])))))
                 src_fmap_dis[i].unchain_backward()
         else:
             src_fmap_dis = []
