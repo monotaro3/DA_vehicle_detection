@@ -48,7 +48,8 @@ def main():
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
     parser.add_argument('--DA_model', type = str, help='DA discriminator class name to be used')
-    parser.add_argument('--DA2_csize', type=str, help='channel size of conv2 of DA2_discriminator')
+    parser.add_argument('--DA2_csize', type=int, help='channel size of conv2 of DA2_discriminator')
+    parser.add_argument('--multibatch_times', type=int, help='number of multiplication of batchsize for discriminator learning')
     parser.add_argument('--updater', type=str, default="Updater1", help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -138,6 +139,8 @@ def main():
             raise ValueError
         buffer = fmapBuffer(args.bufsize,mode=args.bufmode,discriminator=discriminator,gpu=args.gpu)
         updater_args["buffer"] = buffer
+        if args.mode == "DA1_buf_multibatch" and args.multibatch_times:
+            updater_args["n_multi_batch"] = args.multibatch_times
 
 
     # Set up optimizers
