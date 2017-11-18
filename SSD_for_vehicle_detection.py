@@ -222,7 +222,7 @@ class DA1_discriminator(Chain):
 
 
 class DA2_discriminator(Chain):
-    def __init__(self):
+    def __init__(self, c_size = 256):
         #w = chainer.initializers.Normal(wscale)
         super(DA2_discriminator, self).__init__()
         # init = {
@@ -230,7 +230,7 @@ class DA2_discriminator(Chain):
         #     'initial_bias': initializers.Zero(),
         # }
         with self.init_scope():
-            self.conv1 = L.Convolution2D(512, 3, pad=1)
+            self.conv1 = L.Convolution2D(c_size, 3, pad=1)
             self.conv2 = L.Convolution2D(1, 1)
 
     def __call__(self, x):

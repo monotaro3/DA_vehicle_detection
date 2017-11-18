@@ -288,14 +288,15 @@ class DA_updater1_buf(chainer.training.StandardUpdater):
                 tgt_fmap[i] = chainer.cuda.to_cpu(tgt_fmap[i].data)
         self.buf.set_examples(src_fmap,tgt_fmap)
 
-class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for experiments
-    def __init__(self, *args, **kwargs):
+class DA_updater1_buf_multibatch(chainer.training.StandardUpdater):  #hard coding for experiments
+    def __init__(self, n_multi_batch = 16, *args, **kwargs):
         self.dis, self.cls = kwargs.pop('models')
         self.buf = kwargs.pop('buffer')
-        super(DA_updater1_buf_x4, self).__init__(*args, **kwargs)
+        super(DA_updater1_buf_multibatch, self).__init__(*args, **kwargs)
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
+        self.n_multi_batch = n_multi_batch
 
     def update_core(self):
         #t_enc_optimizer = self.get_optimizer('opt_t_enc')
@@ -307,7 +308,7 @@ class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for ex
         batch_source_array = convert.concat_examples(batch_source,self.device)
         #batch_target = self.get_iterator('target').next()
         batchsize = len(batch_source)
-        use_bufsize = int(batchsize*2) ##
+        use_bufsize = int(batchsize*self.n_multi_batch / 2) ##
 
         #compute forwarding with source data
         src_fmap = self.t_enc(batch_source_array[0]) #src feature map
@@ -331,7 +332,7 @@ class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for ex
             #     for i in range(len(src_fmap)):
             #         #src_fmap[i] = Variable(xp.vstack((src_fmap[i][0:batchsize - size], func_bGPU(e_buf_src[i]))))
             #         src_fmap[i] = F.vstack((src_fmap[i][0:batchsize - size], Variable(func_bGPU(e_buf_src[i]))))
-        size_quat = int(size/4)
+        bufsize_split = int(size/self.n_multi_batch )
 
         cls_loss_report = cls_loss.data
         loss_t_enc_report = 0
@@ -339,15 +340,15 @@ class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for ex
         loss_dis_src_report = 0
         loss_dis_tgt_report = 0
 
-        for i in range(4):
+        for i in range(self.n_multi_batch ):
             if i != 0:
                 batch_source = self.get_iterator('main').next()
                 batch_source_array = convert.concat_examples(batch_source, self.device)
                 with chainer.no_backprop_mode():
                     src_fmap = self.t_enc(batch_source_array[0])
-            if size_quat > 0:
+            if bufsize_split > 0:
                 for j in range(len(src_fmap)):
-                    src_fmap[j] = F.vstack((src_fmap[j][0:batchsize - size_quat], Variable(func_bGPU(e_buf_src[j][size_quat*i:size_quat*(i+1)]))))
+                    src_fmap[j] = F.vstack((src_fmap[j][0:batchsize - bufsize_split], Variable(func_bGPU(e_buf_src[j][bufsize_split*i:bufsize_split*(i+1)]))))
             y_source = self.dis(src_fmap)
 
         #size, e_buf_tgt = self.buf_tgt.get_examples(use_bufsize)
@@ -361,21 +362,21 @@ class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for ex
             tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
             tgt_fmap_dis = []
             for j in range(len(tgt_fmap)):
-                tgt_fmap_dis.append(F.copy(tgt_fmap[j][0:batchsize-size_quat],self.device))
+                tgt_fmap_dis.append(F.copy(tgt_fmap[j][0:batchsize-bufsize_split],self.device))
                 tgt_fmap_dis[j].unchain_backward()
-                if size_quat > 0:
-                    tgt_fmap_dis[j] = F.vstack([tgt_fmap_dis[j], Variable(func_bGPU(e_buf_tgt[j][size_quat*i:size_quat*(i+1)]))])
+                if bufsize_split > 0:
+                    tgt_fmap_dis[j] = F.vstack([tgt_fmap_dis[j], Variable(func_bGPU(e_buf_tgt[j][bufsize_split*i:bufsize_split*(i+1)]))])
 
             y_target = self.dis(tgt_fmap_dis)
             y_target_enc = self.dis(tgt_fmap)
 
             n_fmap_elements = y_target.shape[2]*y_target.shape[3]
 
-            loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize / 4
-            loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize / 4
+            loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize / self.n_multi_batch
+            loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize / self.n_multi_batch
             loss_dis = loss_dis_src + loss_dis_tgt
 
-            loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize / 4
+            loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize / self.n_multi_batch
 
             #update cls(and t_enc) by cls_loss and loss_t_enc
             loss_t_enc.backward()
@@ -394,8 +395,8 @@ class DA_updater1_buf_x4(chainer.training.StandardUpdater):  #hard coding for ex
             loss_dis_tgt_report += loss_dis_tgt.data
 
             with chainer.no_backprop_mode():
-                src_fmap = self.t_enc(batch_source_array[0][-size_quat:])
-                tgt_fmap = self.t_enc(xp.array(batch_target[-size_quat:]))
+                src_fmap = self.t_enc(batch_source_array[0][-bufsize_split:])
+                tgt_fmap = self.t_enc(xp.array(batch_target[-bufsize_split:]))
                 for j in range(len(src_fmap)):
                     src_fmap[j] = chainer.cuda.to_cpu(src_fmap[j].data)
                     tgt_fmap[j] = chainer.cuda.to_cpu(tgt_fmap[j].data)
