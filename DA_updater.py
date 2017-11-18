@@ -471,7 +471,7 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
         else:
             src_fmap_dis = []
             for i in range(len(src_fmap)):
-                src_fmap_dis.append(F.copy(src_fmap[i]))
+                src_fmap_dis.append(F.copy(src_fmap[i],self.device))
                 src_fmap_dis[i].unchain_backward()
 
         y_source = self.dis(src_fmap_dis)
