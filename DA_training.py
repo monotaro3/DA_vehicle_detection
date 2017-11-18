@@ -49,8 +49,9 @@ def main():
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
     parser.add_argument('--DA_model', type = str, help='DA discriminator class name to be used')
     parser.add_argument('--DA2_csize', type=int, help='channel size of conv2 of DA2_discriminator')
+    parser.add_argument('--Alt_update_param', type=int, help='parameters of alternative update', nargs = 3, choices = [0,1])
     parser.add_argument('--multibatch_times', type=int, help='number of multiplication of batchsize for discriminator learning')
-    parser.add_argument('--updater', type=str, default="Updater1", help='Updater class name to be used')
+    parser.add_argument('--updater', type=str, help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
     parser.add_argument('--mode', type=str, choices = ["DA1", "DA1_buf","DA1_buf_multibatch"] ,default="DA1", help='mode of domain adaptation')
@@ -96,7 +97,7 @@ def main():
             Discriminator = eval(args.DA_model)
         else:
             Discriminator = DA1_discriminator
-        if args.DA_model == "DA2_updater" and args.DA2_csize:
+        if args.DA_model == "DA2_discriminator" and args.DA2_csize:
             discriminator = Discriminator(args.DA2_csize)
         else:
             discriminator = Discriminator()
@@ -109,7 +110,10 @@ def main():
         target_dataset = Dataset_imgonly(args.target_dataset)
 
     else:
-        Updater = eval(args.updater) #Updater1
+        if args.updater:
+            Updater = eval(args.updater) #Updater1
+        else:
+            Updater = Updater1
         Discriminator = eval(args.adda_model)#ADDA_Discriminator2 #choose discriminator type
         discriminator = Discriminator()
         target_encoder = VGG16Extractor300()
@@ -132,6 +136,12 @@ def main():
 
     if args.mode in ["DA1_buf", "DA1_buf_multibatch"]:
         Updater = DA_updater1_buf
+        if args.updater:
+            Updater = eval(args.updater)
+        if args.updater == "DA_updater1_buf_2":
+            updater_args["bufmode"] = args.Alt_update_param[0]
+            updater_args["batchmode"] = args.Alt_update_param[1]
+            updater_args["cls_train_mode"] = args.Alt_update_param[2]
         if args.mode == "DA1_buf_multibatch":
             Updater = DA_updater1_buf_multibatch
         if args.bufsize < int(args.batchsize/2):
