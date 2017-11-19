@@ -442,9 +442,12 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
 
     def update_core(self):
         if isinstance(self.tgt_steps_schedule,list) and len(self.tgt_steps_schedule) > 0:
-            if self.tgt_steps_schedule[0][0] == self.iteration:
-                self.current_tgt_step = self.tgt_steps_schedule[0][1]
+            while len(self.tgt_steps_schedule) > 0 and self.tgt_steps_schedule[0][0] < self.iteration:
                 self.tgt_steps_schedule.pop(0)
+            if len(self.tgt_steps_schedule) > 0:
+                if self.tgt_steps_schedule[0][0] == self.iteration:
+                    self.current_tgt_step = self.tgt_steps_schedule[0][1]
+                    self.tgt_steps_schedule.pop(0)
 
         #t_enc_optimizer = self.get_optimizer('opt_t_enc')
         dis_optimizer = self.get_optimizer('opt_dis')
