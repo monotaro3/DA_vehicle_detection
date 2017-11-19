@@ -431,12 +431,14 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
         self.batchmode = batchmode
         self.cls_train_mode = cls_train_mode
         self.current_tgt_step = init_tgtstep
-        if tgt_steps_schedule != None:
+        self.tgt_steps_schedule = tgt_steps_schedule
+        if self.tgt_steps_schedule != None:
             if isinstance(tgt_steps_schedule, list):
-                self.tgt_steps_schedule = tgt_steps_schedule
                 self.tgt_steps_schedule.sort(key=lambda x:x[0])
             else:
                 print("tgt step schedule must be specified by list object. The schedule is ignored.")
+                self.tgt_steps_schedule = None
+
 
     def update_core(self):
         if isinstance(self.tgt_steps_schedule,list) and len(self.tgt_steps_schedule) > 0:
