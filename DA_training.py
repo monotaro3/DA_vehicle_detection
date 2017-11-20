@@ -50,11 +50,13 @@ def main():
     parser.add_argument('--DA_model', type = str, help='DA discriminator class name to be used')
     parser.add_argument('--DA2_csize', type=int, help='channel size of conv2 of DA2_discriminator')
     parser.add_argument('--tgt_step_init', type=int, help='initial step number of tgt training in one iteration')
+    parser.add_argument('--dis_step_init', type=int, help='initial step number of discriminator training in one iteration')
     parser.add_argument('--tgt_step_schedule', type=int, nargs = "*", help='schedule of step number of tgt training in one iteration')
     parser.add_argument('--Alt_update_param', type=int, help='parameters of alternative update', nargs = 3, choices = [0,1])
     parser.add_argument('--multibatch_times', type=int, help='number of multiplication of batchsize for discriminator learning')
     parser.add_argument('--updater', type=str, help='Updater class name to be used')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
+    parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
     parser.add_argument('--mode', type=str, choices = ["DA1", "DA1_buf","DA1_buf_multibatch"] ,default="DA1", help='mode of domain adaptation')
     parser.add_argument('--ssdpath', type=str,  help='SSD model file')
@@ -144,6 +146,8 @@ def main():
             updater_args["bufmode"] = args.Alt_update_param[0]
             updater_args["batchmode"] = args.Alt_update_param[1]
             updater_args["cls_train_mode"] = args.Alt_update_param[2]
+            if args.dis_step_init:
+                updater_args["init_disstep"] = args.dis_step_init
             if args.tgt_step_init:
                 updater_args["init_tgtstep"] = args.tgt_step_init
             if args.tgt_step_schedule:
@@ -153,6 +157,8 @@ def main():
                 for i in range(int(len(args.tgt_step_schedule)/2)):
                     tgt_step_schedule.append([args.tgt_step_schedule[i*2],args.tgt_step_schedule[i*2+1]])
                 updater_args["tgt_steps_schedule"] = tgt_step_schedule
+            if args.fixed_source_dataset:
+                updater_args["iterator"]['src_fmaps'] = chainer.iterators.MultiprocessIterator(COWC_fmap_set(args.fixed_source_dataset), args.batchsize)
         if args.mode == "DA1_buf_multibatch":
             Updater = DA_updater1_buf_multibatch
         if args.bufsize < int(args.batchsize/2):
@@ -162,7 +168,6 @@ def main():
         updater_args["buffer"] = buffer
         if args.mode == "DA1_buf_multibatch" and args.multibatch_times:
             updater_args["n_multi_batch"] = args.multibatch_times
-
 
     # Set up optimizers
     opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
