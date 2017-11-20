@@ -11,6 +11,21 @@ import pickle
 import cv2 as cv
 import math
 #from process_COWC import scale_img_bbox
+from COWC_dataset_processed import vehicle_classes
+from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd, defaultbox_size_300, defaultbox_size_512
+
+def initSSD(modelname,resolution,path=None):
+    if modelname == "ssd300":
+        model = SSD300_vd(
+            n_fg_class=len(vehicle_classes),
+            pretrained_model='imagenet', defaultbox_size=defaultbox_size_300[resolution])
+    elif modelname == "ssd512":
+        model = SSD512_vd(
+            n_fg_class=len(vehicle_classes),
+            pretrained_model='imagenet', defaultbox_size=defaultbox_size_512[resolution])
+    if path != None:
+        serializers.load_npz(path, model)
+    return model
 
 def gen_dms_time_str(time_sec):
     sec = time_sec % 60
@@ -86,7 +101,7 @@ def decode_mask2bbox(maskimg,windowsize):
         bbox.append([xmin,ymin,xmax,ymax])
     return bbox
 
-def convertImgs2fmaps(imgsdir,savedir,extractor_path,dirname="train"):
+def convertImgs2fmaps(imgsdir, savedir, model_path, model_class = "extractor", res = 0.3, dirname="train"):
     num_example = 0
     files = os.listdir(imgsdir)
     imgs = []
@@ -94,9 +109,18 @@ def convertImgs2fmaps(imgsdir,savedir,extractor_path,dirname="train"):
         root, ext = os.path.splitext(f)
         if ext in [".png", ".tif"]:
             imgs.append(os.path.join(imgsdir,f))
-    extractor = VGG16Extractor300()
-    serializers.load_npz(extractor_path,extractor)
-    extractor.to_gpu()
+    if model_class == "extractor":
+        extractor = VGG16Extractor300()
+        serializers.load_npz(model_path, extractor)
+        extractor.to_gpu()
+    else:
+        if model_class in ["ssd300","ssd512"]:
+            ssd_model = initSSD(model_class,res,model_path)
+            extractor = ssd_model.extractor
+            extractor.to_gpu()
+        else:
+            print("invalid model class name")
+            return
     fmaplist = os.path.join(savedir,"list",dirname+".txt")
     if not os.path.isdir(os.path.join(savedir,dirname)): os.makedirs(os.path.join(savedir,dirname))
     if not os.path.isdir(os.path.join(savedir, "list")):os.makedirs(os.path.join(savedir, "list"))
@@ -118,10 +142,14 @@ def convertImgs2fmaps(imgsdir,savedir,extractor_path,dirname="train"):
         with open(os.path.join(savedir,dirname,root+".fmp"),"wb") as f:
             pickle.dump(fmap,f)
 
-def make_img_cutout(imgdir,savedir,imgsize,margin = 0,useEdge=False):
+def make_img_cutout(imgdir,savedir,imgsize_out,scale = 1, margin = 0,useEdge=False):
     num_example = 0
     savedir_img = "train"
     savedir_list = "list"
+    if scale != 1:
+        imgsize = int(imgsize_out / scale)
+    else:
+        imgsize = imgsize_out
     if not os.path.isdir(os.path.join(savedir,savedir_img)):os.makedirs(os.path.join(savedir,savedir_img))
     if not os.path.isdir(os.path.join(savedir, savedir_list)): os.makedirs(os.path.join(savedir, savedir_list))
     listfile_path = os.path.join(savedir,savedir_list,savedir_img+".txt")
@@ -156,6 +184,8 @@ def make_img_cutout(imgdir,savedir,imgsize,margin = 0,useEdge=False):
                 num_example += 1
                 if num_example % 100 == 0: print("{0}th file has been output.".format(num_example))
                 rootname = "{0:010d}".format(num_example)
+                if imgsize_out != imgsize:
+                    cutout = cv.resize(cutout,(imgsize_out, imgsize_out))
                 cv.imwrite(os.path.join(savedir,savedir_img,rootname+ext),cutout)
                 with open(listfile_path, 'a') as list:
                     list.write(rootname + "\n")
@@ -218,5 +248,5 @@ if __name__ == "__main__":
     # serializers.load_npz("model/snapshot_iter_30000", trainer)
     # pass
     #convertImgs2fmaps("E:/work/vehicle_detection_dataset/cowc_300px_0.3/train","E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap","model/vgg_300_0.3_30000")
-    #make_img_cutout("E:/work/vehicle_detection_dataset/Khartoum_adda_raw","E:/work/vehicle_detection_dataset/Khartoum_adda",300)
-    scaleConvert("../DA_images/NTT","../DA_images/NTT_scale0.3",0.16/0.3)
+    make_img_cutout("E:/work/ntt_raw_for_test/2","E:/work/vehicle_detection_dataset/NTT_for_test/2",1000,0.16/0.3)
+    #scaleConvert("../DA_images/NTT2","../DA_images/NTT2_scale0.3",0.16/0.3)
