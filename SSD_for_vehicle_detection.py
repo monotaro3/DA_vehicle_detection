@@ -238,6 +238,25 @@ class DA2_discriminator(Chain):
         h = F.leaky_relu(self.conv2(h))
         return h
 
+class DA3_discriminator(Chain):
+    def __init__(self, c_size = 256):
+        #w = chainer.initializers.Normal(wscale)
+        super(DA3_discriminator, self).__init__()
+        # init = {
+        #     'initialW': initializers.LeCunUniform(),
+        #     'initial_bias': initializers.Zero(),
+        # }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(c_size, 3, pad=1)
+            self.conv2 = L.Convolution2D(c_size, 1)
+            self.conv3 = L.Convolution2D(1, 1)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.conv1(x[0]))
+        h = F.leaky_relu(self.conv2(h))
+        h = F.leaky_relu(self.conv3(h))
+        return h
+
 import random
 import numpy as np
 import math
