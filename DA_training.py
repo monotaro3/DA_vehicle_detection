@@ -99,7 +99,7 @@ def main():
             Discriminator = eval(args.DA_model)
         else:
             Discriminator = DA1_discriminator
-        if args.DA_model == "DA2_discriminator" and args.DA2_csize:
+        if args.DA_model in ["DA2_discriminator", "DA3_discriminator"] and args.DA2_csize:
             discriminator = Discriminator(args.DA2_csize)
         else:
             discriminator = Discriminator()
