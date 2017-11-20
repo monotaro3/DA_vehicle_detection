@@ -8,7 +8,7 @@ import os
 from collections import defaultdict
 import numpy as np
 
-def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD"):
+def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_select = None):
     with open(logfile) as f:
         # read json file
         ch_log = json.load(f)
@@ -26,20 +26,35 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD"):
         keys = ['loss_cls', "loss_t_enc","loss_dis"]
     elif mode == "DA_eval":
         keys = ["validation/main/map", "validation/main/F1/car"]
-    data = defaultdict(list)
+    elif mode == "CORAL_loss":
+        keys = ['main/cls_loss','main/CORAL_loss_weighted']
+    elif mode == "CORAL_eval":
+        keys = ['validation_1/main/map','validation_1/main/F1/car']
+    data = defaultdict(lambda :[[],[]])
     for key in keys:
         for ep in ch_log:
             try:
-                data[key].append(ep[key])
+                data[key][1].append(ep[key])
+                data[key][0].append(ep['iteration'])
             except KeyError:
-                data[key].append(0)
-    itr = [ep['iteration'] for ep in ch_log]
+                pass
+    # itr = [ep['iteration'] for ep in ch_log]
+
+    if mode == "CORAL_eval":
+        for i in range(len(data['validation_1/main/map'][0])):
+            data['mean_ap_F1'][0].append(data['validation_1/main/map'][0][i])
+            data['mean_ap_F1'][1].append((data['validation_1/main/map'][1][i]+data['validation_1/main/F1/car'][1][i])/2)
+
+    if mode == "DA_eval":
+        for i in range(len(data['validation/main/map'][0])):
+            data['mean_ap_F1'][0].append(data['validation/main/map'][0][i])
+            data['mean_ap_F1'][1].append((data['validation/main/map'][1][i]+data['validation/main/F1/car'][1][i])/2)
 
     if not os.path.isdir(savedir): os.makedirs(savedir)
     savepath = os.path.join(savedir,figname)
 
-    plt.figure(figsize=(30,10))
-    plt.figure()
+    plt.figure(figsize=(10,6))
+    #plt.figure()
     plt.title("Training loss")
     plt.ylabel("Loss")
     plt.xlabel("Iteration")
@@ -54,35 +69,40 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD"):
     # map = np.array(data["validation/main/map"])
     # f1 = np.array(data["validation/main/F1/car"])
     #index_sorted_
-    try:
-        map = data["validation/main/map"]
-        f1 = data["validation/main/F1/car"]
-        mean = []
-        for i in range(len(map)):
-            if map[i] != None and f1[i] != None:
-                mean.append((i,(map[i]+f1[i])/2))
-        mean.sort(key=lambda x: x[1],reverse=True)
-        for j in range(10):
-            print("map:{0},f1:{1},mean:{2} iter{3}\n".format(map[mean[j][0]],f1[mean[j][0]],mean[j][1],itr[mean[j][0]]))
-    except KeyError:
-        pass
-    for key in data.keys():
-        d_array = np.array(data[key])
-        index_sorted = np.argsort(d_array)[::-1]
-        print("top arguments:")
-        print(index_sorted[0:10])
-        print("top values:")
-        print(d_array[index_sorted[0:10]])
+    # try:
+    #     map = data["validation/main/map"]
+    #     f1 = data["validation/main/F1/car"]
+    #     mean = []
+    #     for i in range(len(map)):
+    #         if map[i] != None and f1[i] != None:
+    #             mean.append((i,(map[i]+f1[i])/2))
+    #     mean.sort(key=lambda x: x[1],reverse=True)
+    #     for j in range(10):
+    #         print("map:{0},f1:{1},mean:{2} iter{3}\n".format(map[mean[j][0]],f1[mean[j][0]],mean[j][1],itr[mean[j][0]]))
+    # except KeyError:
+    #     pass
+    # for key in data.keys():
+    #     d_array = np.array(data[key])
+    #     index_sorted = np.argsort(d_array)[::-1]
+    #     print("top arguments:")
+    #     print(index_sorted[0:10])
+    #     print("top values:")
+    #     print(d_array[index_sorted[0:10]])
 
-    for key in data.keys():
-        plt.plot(itr, data[key], label=key)
+    if key_select:
+        for key in key_select:
+            plt.plot(data[key][0], data[key][1],
+                     label=key.replace("main/", "").replace("validation/", "").replace("validation_1/", ""))
+    else:
+        for key in data.keys():
+            plt.plot(data[key][0], data[key][1], label=key.replace("main/","").replace("validation/","").replace("validation_1/",""))
 
-    plt.ylim([0,1])
+    plt.ylim([0.,10])
+    #plt.ylim([0.5, 0.9])
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.subplots_adjust(right=0.7)
+    plt.subplots_adjust(right=0.6)
     plt.savefig(savepath)
     # plt.show()
 
 if __name__ == "__main__":
-    gengraph("log",figname="train_log_300_0.3_daug_DA2_map_spacenet_eval.png",mode="DA_eval")
-
+    gengraph("model/DA/NTT_buf_alt_100_tmulti_10_nalign_DA2/log",savedir='model/DA/NTT_buf_alt_100_tmulti_10_nalign_DA2/',figname="train_loss.png",mode="DA_loss") #,key_select=('mean_ap_F1',))
