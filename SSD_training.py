@@ -32,29 +32,8 @@ from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
 from COWC_dataset_processed import COWC_dataset_processed, vehicle_classes
 from utils import gen_dms_time_str
 
-defaultbox_size_300 = {
-    0.15: (30, 48.0, 103.5, 159, 214.5, 270, 325.5),
-    0.16: (30, 48.0, 103.5, 159, 214.5, 270, 325.5),
-    0.3: (24, 30, 90, 150, 210, 270, 330),
-}
-defaultbox_size_512 = {
-    0.15: (30.72, 51.2, 133.12, 215.04, 296.96, 378.88, 460.8, 542.72),
-    0.16: (30.72, 46.08, 129.02, 211.97, 294.91, 377.87, 460.8, 543.74),
-    0.3: (25.6, 30.72, 116.74, 202.75, 288.79, 374.78, 460.8, 546.82),
-}  # defaultbox size corresponding to the image resolution
 
-def initSSD(modelname,resolution,path=None):
-    if modelname == "ssd300":
-        model = SSD300_vd(
-            n_fg_class=len(vehicle_classes),
-            pretrained_model='imagenet', defaultbox_size=defaultbox_size_300[resolution])
-    elif modelname == "ssd512":
-        model = SSD512_vd(
-            n_fg_class=len(vehicle_classes),
-            pretrained_model='imagenet', defaultbox_size=defaultbox_size_512[resolution])
-    if path != None:
-        serializers.load_npz(path, model)
-    return model
+
 
 
 
@@ -208,14 +187,14 @@ def main():
         chainer.cuda.get_device_from_id(gpu).use()
         model.to_gpu()
 
-    train = TransformDataset(
+    s_train = TransformDataset(
         # ConcatenatedDataset(
         #     VOCDetectionDataset(year='2007', split='trainval'),
         #     VOCDetectionDataset(year='2012', split='trainval')
         # ),
         COWC_dataset_processed(split="train",datadir=args.datadir),
         Transform(model.coder, model.insize, model.mean))
-    train_iter = chainer.iterators.MultiprocessIterator(train, batchsize)
+    s_train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
 
     # test = VOCDetectionDataset(
     #     year='2007', split='test',
@@ -233,7 +212,7 @@ def main():
         else:
             param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
-    updater = training.StandardUpdater(train_iter, optimizer, device=gpu)
+    updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
     trainer = training.Trainer(updater, (120000, 'iteration'), out)
     trainer.extend(
         extensions.ExponentialShift('lr', 0.1, init=1e-3),

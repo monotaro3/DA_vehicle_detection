@@ -13,7 +13,8 @@ from chainer.datasets import TransformDataset
 from SSD_for_vehicle_detection import *
 from DA_updater import *
 from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly, COWC_dataset_processed, vehicle_classes
-from SSD_training import initSSD, Transform
+from SSD_training import  Transform
+from utils import initSSD
 from SSD_test import ssd_evaluator
 
 sys.path.append(os.path.dirname(__file__))

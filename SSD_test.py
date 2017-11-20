@@ -16,7 +16,7 @@ import csv
 #--custom
 from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
 from COWC_dataset_processed import vehicle_classes
-from SSD_training import defaultbox_size_300, defaultbox_size_512
+from SSD_for_vehicle_detection import defaultbox_size_300, defaultbox_size_512
 from utils import make_bboxeslist_chainercv
 
 def draw_rect(image, bbox, match):
@@ -281,8 +281,9 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
         return observation
 
 if __name__ == "__main__":
-    imagepath = "c:/work/DA_images/spacenet"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
-    modelpath = "model/SSD300_vd_DA1_spacenet_lt_9190.npz"
-    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/spacenet_DA1_daug_lt/9190/",resolution=0.3,modelsize="ssd300")
+    imagepath = "c:/work/DA_images/NTT_scale0.3/2_6"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
+    #modelpath = "model/model_iter_60000"
+    modelpath = "model/DA/NTT_buf_alt_100_nalign_DA2/SSD300_vd_10500.npz"
+    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/res0.3/experiment_basis_NTT/buf_alt_100_nalign_DA2/2_10500",resolution=0.3,modelsize="ssd300")
 
 

@@ -5,11 +5,11 @@ from chainercv.utils import apply_prediction_to_iterator
 
 from COWC_dataset_processed import COWC_dataset_processed, vehicle_classes
 from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
-from SSD_training import defaultbox_size_300, defaultbox_size_512
+from SSD_for_vehicle_detection import defaultbox_size_300, defaultbox_size_512
 from eval_detection_voc_custom import eval_detection_voc_custom
 
-datadir = "E:/work/vehicle_detection_dataset/cowc_300px_0.3"
-ssd_path = "model/ssd_300_0.3_30000"
+datadir = "E:/work/vehicle_detection_dataset/cowc_300px_0.3_daug_mask"
+ssd_path = "model/model_iter_60000"
 batchsize = 1
 modelsize = "ssd300"
 resolution = 0.3

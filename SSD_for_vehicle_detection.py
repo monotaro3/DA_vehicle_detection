@@ -8,6 +8,18 @@ from chainer import Chain, initializers
 import chainer.links as L
 import chainer.functions as F
 
+
+defaultbox_size_300 = {
+    0.15: (30, 48.0, 103.5, 159, 214.5, 270, 325.5),
+    0.16: (30, 48.0, 103.5, 159, 214.5, 270, 325.5),
+    0.3: (24, 30, 90, 150, 210, 270, 330),
+}
+defaultbox_size_512 = {
+    0.15: (30.72, 51.2, 133.12, 215.04, 296.96, 378.88, 460.8, 542.72),
+    0.16: (30.72, 46.08, 129.02, 211.97, 294.91, 377.87, 460.8, 543.74),
+    0.3: (25.6, 30.72, 116.74, 202.75, 288.79, 374.78, 460.8, 546.82),
+}  # defaultbox size corresponding to the image resolution
+
 class SSD512_vd(SSD512):
     def __init__(self, n_fg_class=None, pretrained_model=None,defaultbox_size=(35.84, 76.8, 153.6, 230.4, 307.2, 384.0, 460.8, 537.6),mean = _imagenet_mean):
         n_fg_class, path = _check_pretrained_model(
