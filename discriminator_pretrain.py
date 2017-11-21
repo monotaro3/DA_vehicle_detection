@@ -9,9 +9,10 @@ class dis_updater(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         #self.dis, self.cls = kwargs.pop('models')
         #self.buf = kwargs.pop('buffer')
+        self.discriminator = kwargs.pop('discriminator')
         super(dis_updater, self).__init__(*args, **kwargs)
         #self.t_enc = self.cls.extractor
-        self.discriminator = kwargs.pop('discriminator')
+
 
     def update_core(self):
         optimizer = self.get_optimizer("main")
