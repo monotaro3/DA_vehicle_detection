@@ -197,7 +197,7 @@ def main():
     # for m in models:
     #     trainer.extend(extensions.snapshot_object(
     #         m, m.__class__.__name__ + '_{.updater.iteration}.npz'), trigger=(args.snapshot_interval, 'iteration'))
-    trainer.extend(extensions.observe_lr(optimizer_name="opt_dis", observation_key='lr_dis'),
+    trainer.extend(extensions.observe_lr(optimizer_name="opt_cls", observation_key='lr_cls'),
                    trigger=(args.display_interval, 'iteration'))
     if args.mode in ["DA1", "DA1_buf", "DA1_buf_multibatch"]:
         trainer.extend(extensions.observe_lr(optimizer_name="opt_cls",observation_key='lr_cls'),trigger=(args.display_interval, 'iteration'))
