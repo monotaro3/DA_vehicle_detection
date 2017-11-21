@@ -70,7 +70,7 @@ def main():
 
     if args.mode in ["DA1","DA1_buf","DA1_buf_multibatch"]:
         report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
-                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr']
+                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr_dis','lr_cls']
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
 
@@ -189,7 +189,10 @@ def main():
     # for m in models:
     #     trainer.extend(extensions.snapshot_object(
     #         m, m.__class__.__name__ + '_{.updater.iteration}.npz'), trigger=(args.snapshot_interval, 'iteration'))
-    trainer.extend(extensions.observe_lr(), trigger=(args.display_interval, 'iteration'))
+    trainer.extend(extensions.observe_lr(optimizer_name="opt_dis", observation_key='lr_dis'),
+                   trigger=(args.display_interval, 'iteration'))
+    if args.mode in ["DA1", "DA1_buf", "DA1_buf_multibatch"]:
+        trainer.extend(extensions.observe_lr(optimizer_name="opt_cls",observation_key='lr_cls'),trigger=(args.display_interval, 'iteration'))
     trainer.extend(extensions.snapshot(), trigger=(args.snapshot_interval, 'iteration'))
     trainer.extend(extensions.LogReport(keys=report_keys,
                                         trigger=(args.display_interval, 'iteration')))
