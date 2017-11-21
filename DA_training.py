@@ -70,7 +70,7 @@ def main():
 
     if args.mode in ["DA1","DA1_buf","DA1_buf_multibatch"]:
         report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
-                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car']
+                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr']
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
 
