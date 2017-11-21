@@ -49,6 +49,7 @@ def main():
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
     parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
     parser.add_argument('--DA_model', type = str, help='DA discriminator class name to be used')
+    parser.add_argument('--discriminator_init', type=str, help='discriminator file path for initialization')
     parser.add_argument('--DA2_csize', type=int, help='channel size of conv2 of DA2_discriminator')
     parser.add_argument('--tgt_step_init', type=int, help='initial step number of tgt training in one iteration')
     parser.add_argument('--dis_step_init', type=int, help='initial step number of discriminator training in one iteration')
@@ -59,7 +60,7 @@ def main():
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
-    parser.add_argument('--mode', type=str, choices = ["DA1", "DA1_buf","DA1_buf_multibatch"] ,default="DA1", help='mode of domain adaptation')
+    parser.add_argument('--mode', type=str, choices = ["DA1", "DA1_buf","DA1_buf_multibatch","DA_fix_dis"] ,default="DA1", help='mode of domain adaptation')
     parser.add_argument('--ssdpath', type=str,  help='SSD model file')
     parser.add_argument('--evalimg', type=str, help='img path for evaluation')
     parser.add_argument('--resume', type=str, help='trainer snapshot path for resume')
@@ -71,6 +72,8 @@ def main():
     if args.mode in ["DA1","DA1_buf","DA1_buf_multibatch"]:
         report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
                        'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr_dis','lr_cls']
+    elif args.mode == "DA_fix_dis":
+        report_keys = ["loss_t_enc", "loss_cls","lr_cls"]
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
 
@@ -96,7 +99,7 @@ def main():
     #     else:
     #         raise NotImplementedError()
 
-    if args.mode in  ["DA1", "DA1_buf","DA1_buf_multibatch"]:
+    if args.mode in  ["DA1", "DA1_buf","DA1_buf_multibatch","DA_fix_dis"]:
         Updater = DA_updater1
         if args.DA_model:
             Discriminator = eval(args.DA_model)
@@ -125,6 +128,9 @@ def main():
 
         serializers.load_npz(args.initencoder, target_encoder)
         models = [discriminator, target_encoder]
+
+    if args.discriminator_init:
+        serializers.load_npz(args.discriminator_init,discriminator)
 
     if args.gpu >= 0:
         chainer.cuda.get_device_from_id(args.gpu).use()
@@ -169,10 +175,12 @@ def main():
         updater_args["buffer"] = buffer
         if args.mode == "DA1_buf_multibatch" and args.multibatch_times:
             updater_args["n_multi_batch"] = args.multibatch_times
+    if args.mode == "DA_fix_dis":
+        Updater = DA_updater_enc_only
 
     # Set up optimizers
     opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
-    if args.mode in ["DA1", "DA1_buf","DA1_buf_multibatch"]:
+    if args.mode in ["DA1", "DA1_buf","DA1_buf_multibatch","DA_fix_dis"]:
         opts["opt_cls"] = make_optimizer(ssd_model, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     else:
         opts["opt_t_enc"] = make_optimizer(target_encoder, args.adam_alpha, args.adam_beta1, args.adam_beta2)

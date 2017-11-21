@@ -639,5 +639,43 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
         #         tgt_fmap[i] = chainer.cuda.to_cpu(tgt_fmap[i].data)
         # self.buf.set_examples(src_fmap,tgt_fmap)
 
+class DA_updater_enc_only(chainer.training.StandardUpdater):
+    def __init__(self,  *args, **kwargs):
+        self.dis, self.cls = kwargs.pop('models')
+        super(DA_updater_enc_only, self).__init__(*args, **kwargs)
+        self.t_enc = self.cls.extractor
+        self.alpha = 1
+        self.k = 3
+
+    def update_core(self):
+        #t_enc_optimizer = self.get_optimizer('opt_t_enc')
+        # dis_optimizer = self.get_optimizer('opt_dis')
+        cls_optimizer = self.get_optimizer('opt_cls')
+        xp = self.dis.xp
+
+        batch_source = self.get_iterator('main').next()
+        batch_source_array = convert.concat_examples(batch_source,self.device)
+        src_fmap = self.t_enc(batch_source_array[0])  # src feature map
+        batch_target = self.get_iterator('target').next()
+        batchsize = len(batch_target)
+
+        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        y_target_enc = self.dis(tgt_fmap)
+        mb_locs, mb_confs = self.cls.multibox(src_fmap)
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, batch_source_array[1], batch_source_array[2], self.k)
+        cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
+
+        n_fmap_elements = y_target_enc.shape[2] * y_target_enc.shape[3]
+        loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
+
+        #update cls(and t_enc) by cls_loss and loss_t_enc
+        self.cls.cleargrads()
+        loss_t_enc.backward()
+        cls_loss.backward()
+        cls_optimizer.update()
+
+        chainer.reporter.report({'loss_t_enc': loss_t_enc})
+        chainer.reporter.report({'loss_cls': cls_loss})
 
 
