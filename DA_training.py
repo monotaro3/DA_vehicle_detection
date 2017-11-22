@@ -69,11 +69,9 @@ def main():
 
     args = parser.parse_args()
 
-    if args.mode in ["DA1","DA1_buf","DA1_buf_multibatch"]:
+    if args.mode in ["DA1","DA1_buf","DA1_buf_multibatch","DA_fix_dis"]:
         report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
                        'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr_dis','lr_cls']
-    elif args.mode == "DA_fix_dis":
-        report_keys = ["loss_t_enc", "loss_cls","lr_cls"]
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
 
