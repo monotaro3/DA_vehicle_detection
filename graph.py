@@ -41,14 +41,38 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
     # itr = [ep['iteration'] for ep in ch_log]
 
     if mode == "CORAL_eval":
-        for i in range(len(data['validation_1/main/map'][0])):
-            data['mean_ap_F1'][0].append(data['validation_1/main/map'][0][i])
-            data['mean_ap_F1'][1].append((data['validation_1/main/map'][1][i]+data['validation_1/main/F1/car'][1][i])/2)
+        map_ = data['validation_1/main/map'][:]
+        f1_ = data['validation_1/main/F1/car'][:]
+        difference = set(map_[0]) ^ set(f1_[0])
+        for d in difference:
+            if d in map_[0]:
+                index = map_[0].index(d)
+                map_[0].pop(index)
+                map_[1].pop(index)
+            if d in f1_[0]:
+                index = f1_[0].index(d)
+                f1_[0].pop(index)
+                f1_[1].pop(index)
+        for i in range(len(map_[0])):
+            data['mean_ap_F1'][0].append(map_[0][i])
+            data['mean_ap_F1'][1].append((map_[1][i] + f1_[1][i]) / 2)
 
     if mode == "DA_eval":
-        for i in range(len(data['validation/main/map'][0])):
-            data['mean_ap_F1'][0].append(data['validation/main/map'][0][i])
-            data['mean_ap_F1'][1].append((data['validation/main/map'][1][i]+data['validation/main/F1/car'][1][i])/2)
+        map_ = data['validation/main/map'][:]
+        f1_ =  data['validation/main/F1/car'][:]
+        difference = set(map_[0])^set(f1_[0])
+        for d in difference:
+            if d in map_[0]:
+                index = map_[0].index(d)
+                map_[0].pop(index)
+                map_[1].pop(index)
+            if d in f1_[0]:
+                index = f1_[0].index(d)
+                f1_[0].pop(index)
+                f1_[1].pop(index)
+        for i in range(len(map_[0])):
+            data['mean_ap_F1'][0].append(map_[0][i])
+            data['mean_ap_F1'][1].append((map_[1][i]+f1_[1][i])/2)
 
     if not os.path.isdir(savedir): os.makedirs(savedir)
     savepath = os.path.join(savedir,figname)
@@ -97,12 +121,12 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
         for key in data.keys():
             plt.plot(data[key][0], data[key][1], label=key.replace("main/","").replace("validation/","").replace("validation_1/",""))
 
-    plt.ylim([0.,10])
-    #plt.ylim([0.5, 0.9])
+    #plt.ylim([0.,10])
+    plt.ylim([0.5, 0.9])
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.subplots_adjust(right=0.6)
     plt.savefig(savepath)
     # plt.show()
 
 if __name__ == "__main__":
-    gengraph("model/DA/NTT_buf_alt_100_tmulti_10_nalign_DA2/log",savedir='model/DA/NTT_buf_alt_100_tmulti_10_nalign_DA2/',figname="train_loss.png",mode="DA_loss") #,key_select=('mean_ap_F1',))
+    gengraph("model/DA/NTT_buf_sfixed_alt_100_nalign_DA2_dispt_20000/log",savedir='model/DA/NTT_buf_sfixed_alt_100_nalign_DA2_dispt_20000/',figname="train_eval.png",mode="DA_eval") #,key_select=('mean_ap_F1',))
