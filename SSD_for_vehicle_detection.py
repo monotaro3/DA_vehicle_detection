@@ -250,6 +250,24 @@ class DA2_discriminator(Chain):
         h = F.leaky_relu(self.conv2(h))
         return h
 
+class DA2_discriminator_bn(Chain):
+    def __init__(self, c_size = 256):
+        #w = chainer.initializers.Normal(wscale)
+        super(DA2_discriminator_bn, self).__init__()
+        # init = {
+        #     'initialW': initializers.LeCunUniform(),
+        #     'initial_bias': initializers.Zero(),
+        # }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(c_size, 3, pad=1)
+            self.bn1 = L.BatchNormalization(c_size)
+            self.conv2 = L.Convolution2D(1, 1)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.bn1(self.conv1(x[0])))
+        h = F.leaky_relu(self.conv2(h))
+        return h
+
 class DA3_discriminator(Chain):
     def __init__(self, c_size = 256):
         #w = chainer.initializers.Normal(wscale)
@@ -266,6 +284,27 @@ class DA3_discriminator(Chain):
     def __call__(self, x):
         h = F.leaky_relu(self.conv1(x[0]))
         h = F.leaky_relu(self.conv2(h))
+        h = F.leaky_relu(self.conv3(h))
+        return h
+
+class DA3_discriminator_bn(Chain):
+    def __init__(self, c_size = 256):
+        #w = chainer.initializers.Normal(wscale)
+        super(DA3_discriminator_bn, self).__init__()
+        # init = {
+        #     'initialW': initializers.LeCunUniform(),
+        #     'initial_bias': initializers.Zero(),
+        # }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(c_size, 3, pad=1)
+            self.bn1 = L.BatchNormalization(c_size)
+            self.conv2 = L.Convolution2D(c_size, 1)
+            self.bn2 = L.BatchNormalization(c_size)
+            self.conv3 = L.Convolution2D(1, 1)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.bn1(self.conv1(x[0])))
+        h = F.leaky_relu(self.bn2(self.conv2(h)))
         h = F.leaky_relu(self.conv3(h))
         return h
 
@@ -287,6 +326,30 @@ class DA4_discriminator(Chain):
         h = F.leaky_relu(self.conv1(x[0]))
         h = F.leaky_relu(self.conv2(h))
         h = F.leaky_relu(self.conv3(h))
+        h = F.leaky_relu(self.conv4(h))
+        return h
+
+class DA4_discriminator_bn(Chain):
+    def __init__(self):
+        #w = chainer.initializers.Normal(wscale)
+        super(DA4_discriminator_bn, self).__init__()
+        # init = {
+        #     'initialW': initializers.LeCunUniform(),
+        #     'initial_bias': initializers.Zero(),
+        # }
+        with self.init_scope():
+            self.conv1 = L.Convolution2D(1024, 3, pad=1)
+            self.bn1 = L.BatchNormalization(1024)
+            self.conv2 = L.Convolution2D(512, 1)
+            self.bn2 = L.BatchNormalization(512)
+            self.conv3 = L.Convolution2D(256, 1)
+            self.bn3 = L.BatchNormalization(256)
+            self.conv4 = L.Convolution2D(1, 1)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.bn1(self.conv1(x[0])))
+        h = F.leaky_relu(self.bn2(self.conv2(h)))
+        h = F.leaky_relu(self.bn3(self.conv3(h)))
         h = F.leaky_relu(self.conv4(h))
         return h
 
