@@ -138,6 +138,7 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             gt_labels.append(np.stack([0]*len(gt_bbox)).astype(np.int32))
     if not testonly:
         result, stats, matches = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
+        mean_ap_f1 = (result['map'] + stats[0]['F1']) / 2
 
     if not evalonly:
         #visualizations
@@ -167,11 +168,10 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             gt_bbox = gt_bboxes[images.index(imagepath)]
             draw_rect(image_, gt_bbox, np.array((0,) * gt_bbox.shape[0],dtype=np.int8))
             cv.imwrite(os.path.join(resultdir,result_name+ "_vis_gt.png"), image_)
-
-        mean_ap_f1 = (result['map']+stats[0]['F1'])/2
         result_txt = os.path.join(resultdir,"result.txt")
         with open(result_txt,mode="w") as f:
             f.write(str(result) +"\n" + str(stats) + '\nmean_ap_F1: ' + str(mean_ap_f1))
+
     print(result)
     print(stats)
     print("mean_ap_F1:{0}".format(mean_ap_f1))
@@ -285,7 +285,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
 if __name__ == "__main__":
     imagepath = "c:/work/DA_images/NTT_scale0.3/2_6"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
     #modelpath = "model/model_iter_60000"
-    modelpath = "model/DA/NTT_buf_alt_100_nalign_nmargin/SSD300_vd_4730.npz"
-    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/res0.3/experiment_basis_NTT/buf_alt_100_nalign_nmargin/5_4730_",resolution=0.3,modelsize="ssd300")
+    modelpath = "model/DA/NTT_buf_alt_100_nalign_nmargin_3/SSD300_vd_3160.npz"
+    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/res0.3/experiment_basis_NTT/buf_alt_100_nalign_nmargin_3/3_3160",resolution=0.3,modelsize="ssd300")
 
 
