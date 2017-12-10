@@ -138,7 +138,7 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             gt_labels.append(np.stack([0]*len(gt_bbox)).astype(np.int32))
     if not testonly:
         result, stats, matches = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
-        mean_ap_f1 = (result['map'] + stats[0]['F1']) / 2
+        mean_ap_f1 = (result['map'] + (stats[0]['F1'] if stats[0]['F1'] != None else 0)) / 2
 
     if not evalonly:
         #visualizations
@@ -285,7 +285,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
 if __name__ == "__main__":
     imagepath = "c:/work/DA_images/NTT_scale0.3/2_6"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
     #modelpath = "model/model_iter_60000"
-    modelpath = "model/DA/NTT_buf_alt_100_nalign_nmargin_3/SSD300_vd_3160.npz"
-    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/res0.3/experiment_basis_NTT/buf_alt_100_nalign_nmargin_3/3_3160",resolution=0.3,modelsize="ssd300")
+    modelpath = "model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_27340.npz"
+    ssd_test(modelpath,imagepath,procDir=True,resultdir="result/res0.3/CORAL/ft_patch_w100000000_nmargin/2_27340",resolution=0.3,modelsize="ssd300")
 
 
