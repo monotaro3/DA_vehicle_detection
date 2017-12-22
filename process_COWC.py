@@ -97,7 +97,7 @@ def mask_margin(img, bbox, margin,windowsize):
         bbox_.append([xmin,ymin,xmax,ymax])
     return img_, bbox_
 
-def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize,rotate,mask_margin_test):
+def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_output,windowsize,rotate,mask_margin_test,maketestdata=True):
     image = cv.imread(image_path)
     image_mask = cv.imread(image_mask_path)
     height, width, channel = image.shape
@@ -144,7 +144,7 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
                         bbox_ = decode_mask2bbox(cutout_mask_,windowsize)
                         if len(bbox_) > 0:  #omit if there is no car
                             all_img_number_unique += 1
-                            if all_img_number_unique % 4 != 0:
+                            if not maketestdata or all_img_number_unique % 4 != 0:
                                 usage = "train"
                                 train_img_number += n_angles
                                 img_number = train_img_number
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     save_directory = ""
 
-    directories_list = "process_COWC_dirs.txt"
+    directories_list = "process_COWC_dirs_test.txt"
 
     dir_lists = [dir_.strip() for dir_ in open(directories_list)]
     for dir_ in dir_lists:
@@ -215,13 +215,15 @@ if __name__ == "__main__":
     print(process_directories)
 
     output_size = 300
-    windowsize = 50
+    windowsize = 25
     adjust_margin = False
     margin = 100
     mask_margin_test = True
     use_edge = False
-    scale = 0.5 # set None when not using, 0.5 -> halve the resolution
+    scale = None # set None when not using, 0.5 -> halve the resolution
     rotate = True
+    maketestdata = False
+    mydata_mode = True
 
     train_img_number = 0
     test_img_number = 0
@@ -231,8 +233,9 @@ if __name__ == "__main__":
 
     if not os.path.isdir(os.path.join(save_directory,"train")):
         os.makedirs(os.path.join(save_directory,"train"))
-    if not os.path.isdir(os.path.join(save_directory, "validation")):
-        os.makedirs(os.path.join(save_directory, "validation"))
+    if maketestdata:
+        if not os.path.isdir(os.path.join(save_directory, "validation")):
+            os.makedirs(os.path.join(save_directory, "validation"))
     if not os.path.isdir(os.path.join(save_directory, "list")):
         os.makedirs(os.path.join(save_directory, "list"))
 
@@ -244,13 +247,20 @@ if __name__ == "__main__":
         filelist.sort()
         image_list = []
         image_mask_list = []
-        for file in filelist:
-            root, ext = os.path.splitext(file)
-            if ext == ".png" and root.find("Annotated") == -1:
-                image_list.append(os.path.join(directory, file))
-                image_mask_list.append(os.path.join(directory, root + "_Annotated_Cars.png"))
+        if mydata_mode:
+            for file in filelist:
+                root, ext = os.path.splitext(file)
+                if ext == ".tif" and root.find("_gtmap") == -1:
+                    image_list.append(os.path.join(directory, file))
+                    image_mask_list.append(os.path.join(directory, root + "_gtmap.tif"))
+        else:
+            for file in filelist:
+                root, ext = os.path.splitext(file)
+                if ext == ".png" and root.find("Annotated") == -1:
+                    image_list.append(os.path.join(directory, file))
+                    image_mask_list.append(os.path.join(directory, root + "_Annotated_Cars.png"))
 
         for image_path, image_mask_path in zip(image_list,image_mask_list):
             print("processing image:" + image_path)
-            make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize,rotate,mask_margin_test)
+            make_img_cutouts(image_path, image_mask_path, save_directory, cutout_size, output_size,windowsize,rotate,mask_margin_test,maketestdata)
 
