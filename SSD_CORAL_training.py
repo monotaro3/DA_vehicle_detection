@@ -104,7 +104,7 @@ class Multibox_CORAL_loss(chainer.Chain):
             t_anno_fmap = self.extractor(t_anno[0])
             s_t_fmap = []
             for i in range(len(t_anno_fmap)):
-                s_t_fmap.append(F.vstack(F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],self.device),t_anno_fmap[i]))
+                s_t_fmap.append(F.vstack((F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],self.device),t_anno_fmap[i])))
             s_t_gt_mb_locs = xp.vstack(gt_mb_locs[:s_batchsize-t_anno_batchsize],t_anno[1])
             s_t_gt_mb_labels = xp.vstack(gt_mb_labels[:s_batchsize-t_anno_batchsize],t_anno[2])
             mb_locs, mb_confs = self.model.multibox(s_t_fmap)
