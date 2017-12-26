@@ -29,7 +29,7 @@ from chainercv.links.model.ssd import resize_with_random_interpolation
 import time
 
 #--custom
-from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
+from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd, defaultbox_size_300, defaultbox_size_512
 from COWC_dataset_processed import COWC_dataset_processed, vehicle_classes
 from utils import gen_dms_time_str
 
@@ -180,9 +180,6 @@ def main():
     resume = args.resume
 
     exectime = time.time()
-
-    global defaultbox_size_300
-    global defaultbox_size_512
 
     # if args.model == 'ssd300':
     #     model = SSD300(
