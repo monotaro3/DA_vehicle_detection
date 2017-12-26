@@ -249,7 +249,10 @@ def main():
         test, batchsize, repeat=False, shuffle=False)
 
     # initial lr is set to 1e-3 by ExponentialShift
-    optimizer = chainer.optimizers.MomentumSGD()
+    if args.lrdecay_schedule[0] == -1:
+        optimizer = chainer.optimizers.MomentumSGD(args.lr)
+    else:
+        optimizer = chainer.optimizers.MomentumSGD()
     optimizer.setup(train_chain)
     for param in train_chain.params():
         if param.name == 'b':
@@ -263,9 +266,7 @@ def main():
         updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out)
 
-    if args.lrdecay_schedule[0] == -1:
-        optimizer.hyperparam.lr = args.lr
-    else:
+    if args.lrdecay_schedule[0] != -1:
         trainer.extend(
             extensions.ExponentialShift('lr', 0.1, init=args.lr),
             trigger=triggers.ManualScheduleTrigger(list(args.lrdecay_schedule), 'iteration'))
