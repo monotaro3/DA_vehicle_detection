@@ -90,77 +90,85 @@ class Multibox_CORAL_loss(chainer.Chain):
         self.extractor = self.model.extractor
         self.device = device
 
-    def __call__(self, s_imgs, gt_mb_locs, gt_mb_labels, t_imgs,t_anno = None):
+    def __call__(self, mode, s_imgs, gt_mb_locs, gt_mb_labels, t_imgs,t_anno = None):
         # mb_locs, mb_confs = self.model(s_imgs)
         # loc_loss, conf_loss = multibox_loss(
         #     mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
         # loss = loc_loss * self.alpha + conf_loss
         xp = self.model.xp
 
-        s_batchsize=len(s_imgs)
-        src_fmap = self.extractor(s_imgs)  # src feature map
-        if t_anno:
-            t_anno_batchsize = len(t_anno[0])
-            t_anno_fmap = self.extractor(t_anno[0])
-            s_t_fmap = []
-            for i in range(len(t_anno_fmap)):
-                s_t_fmap.append(F.vstack((F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],self.device),t_anno_fmap[i])))
-            s_t_gt_mb_locs = xp.vstack((gt_mb_locs[:s_batchsize-t_anno_batchsize],t_anno[1]))
-            s_t_gt_mb_labels = xp.vstack((gt_mb_labels[:s_batchsize-t_anno_batchsize],t_anno[2]))
-            mb_locs, mb_confs = self.model.multibox(s_t_fmap)
-            loc_loss, conf_loss = multibox_loss(
-                mb_locs, mb_confs, s_t_gt_mb_locs, s_t_gt_mb_labels, self.k)
-            cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
-        else:
-            mb_locs, mb_confs = self.model.multibox(src_fmap)
-            loc_loss, conf_loss = multibox_loss(
-                mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
-            cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
-        batchsize_tgt = len(t_imgs)
+        if mode == 'ssd':
+            s_batchsize=len(s_imgs)
+            src_fmap = self.extractor(s_imgs)  # src feature map
+            if t_anno:
+                t_anno_batchsize = len(t_anno[0])
+                t_anno_fmap = self.extractor(t_anno[0])
+                s_t_fmap = []
+                for i in range(len(t_anno_fmap)):
+                    s_t_fmap.append(F.vstack((F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],self.device),t_anno_fmap[i])))
+                s_t_gt_mb_locs = xp.vstack((gt_mb_locs[:s_batchsize-t_anno_batchsize],t_anno[1]))
+                s_t_gt_mb_labels = xp.vstack((gt_mb_labels[:s_batchsize-t_anno_batchsize],t_anno[2]))
+                mb_locs, mb_confs = self.model.multibox(s_t_fmap)
+                loc_loss, conf_loss = multibox_loss(
+                    mb_locs, mb_confs, s_t_gt_mb_locs, s_t_gt_mb_labels, self.k)
+                cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
+            else:
+                mb_locs, mb_confs = self.model.multibox(src_fmap)
+                loc_loss, conf_loss = multibox_loss(
+                    mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
+                cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
 
-        tgt_fmap = self.extractor(t_imgs)
-        src_examples = src_fmap[0][:batchsize_tgt]
-        tgt_examples = tgt_fmap[0]
-        n_data, c, w, h = src_examples.shape
+            chainer.reporter.report(
+                {'cls_loss': cls_loss, 'loss/loc': loc_loss, 'loss/conf': conf_loss,},self)
+            return cls_loss
 
-        if self.CORAL_calculation == 0:
-            src_examples = F.transpose(src_examples, axes=(0,2,3,1))
-            src_examples = F.reshape(src_examples,(n_data*w*h, c))
-            tgt_examples = F.transpose(tgt_examples, axes=(0, 2, 3, 1))
-            tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c))
-            n_data = n_data * w * h
-            norm_coef = 1 / (4 * c**2)
-        elif self.CORAL_calculation == 1:
-            src_examples = F.im2col(src_examples,3,1,1)
-            src_examples = F.reshape(src_examples,(n_data,c,3*3,w,h))
-            src_examples = F.transpose(src_examples, axes=(0,3,4,1,2))
-            src_examples = F.reshape(src_examples,(n_data*w*h,c*3*3))
-            tgt_examples = F.im2col(tgt_examples, 3, 1, 1)
-            tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
-            tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
-            tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
-            n_data = n_data * w * h
-            norm_coef = 1 / (4 * (c * 3 * 3)**2)
-        else:
-            src_examples = F.reshape(src_examples, (n_data,-1))
-            tgt_examples = F.reshape(tgt_examples, (n_data, -1))
-            norm_coef = 1 / (4 * (c * w * h) ** 2)
-        xp = self.model.xp
-        colvec_1 = xp.ones((1,n_data),dtype=np.float32)
-        _s_tempmat = F.matmul(Variable(colvec_1),src_examples)
-        _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
-        s_cov_mat = (F.matmul(F.transpose(src_examples),src_examples) - F.matmul(F.transpose(_s_tempmat),_s_tempmat) / n_data) / n_data -1 if n_data > 1 else 1
-        t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
-                                                                                  _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
-        CORAL_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef
+        elif mode == 'CORAL':
 
-        loss = cls_loss + CORAL_loss * self.CORAL_weight
+            batchsize_tgt = len(t_imgs)
+            src_fmap = self.extractor(s_imgs)
+            tgt_fmap = self.extractor(t_imgs)
+            src_examples = src_fmap[0][:batchsize_tgt]
+            tgt_examples = tgt_fmap[0]
+            n_data, c, w, h = src_examples.shape
 
-        chainer.reporter.report(
-            {'loss': loss, 'cls_loss': cls_loss, 'loss/loc': loc_loss, 'loss/conf': conf_loss, 'CORAL_loss_weighted': CORAL_loss * self.CORAL_weight},
-            self)
+            if self.CORAL_calculation == 0:
+                src_examples = F.transpose(src_examples, axes=(0,2,3,1))
+                src_examples = F.reshape(src_examples,(n_data*w*h, c))
+                tgt_examples = F.transpose(tgt_examples, axes=(0, 2, 3, 1))
+                tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c))
+                n_data = n_data * w * h
+                norm_coef = 1 / (4 * c**2)
+            elif self.CORAL_calculation == 1:
+                src_examples = F.im2col(src_examples,3,1,1)
+                src_examples = F.reshape(src_examples,(n_data,c,3*3,w,h))
+                src_examples = F.transpose(src_examples, axes=(0,3,4,1,2))
+                src_examples = F.reshape(src_examples,(n_data*w*h,c*3*3))
+                tgt_examples = F.im2col(tgt_examples, 3, 1, 1)
+                tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
+                tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
+                tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
+                n_data = n_data * w * h
+                norm_coef = 1 / (4 * (c * 3 * 3)**2)
+            else:
+                src_examples = F.reshape(src_examples, (n_data,-1))
+                tgt_examples = F.reshape(tgt_examples, (n_data, -1))
+                norm_coef = 1 / (4 * (c * w * h) ** 2)
+            xp = self.model.xp
+            colvec_1 = xp.ones((1,n_data),dtype=np.float32)
+            _s_tempmat = F.matmul(Variable(colvec_1),src_examples)
+            _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
+            s_cov_mat = (F.matmul(F.transpose(src_examples),src_examples) - F.matmul(F.transpose(_s_tempmat),_s_tempmat) / n_data) / n_data -1 if n_data > 1 else 1
+            t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
+                                                                                      _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+            CORAL_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef * self.CORAL_weight
 
-        return loss
+            # loss = cls_loss + CORAL_loss * self.CORAL_weight
+
+            chainer.reporter.report(
+                {'CORAL_loss_weighted': CORAL_loss * self.CORAL_weight},
+                self)
+
+            return CORAL_loss
 
 class Updater_CORAL(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
@@ -175,6 +183,10 @@ class Updater_CORAL(chainer.training.StandardUpdater):
         optimizer = self.get_optimizer('main')
         xp = self.loss_func.xp
 
+        self.loss_func.model.cleargrads()
+
+        loss_sum = 0
+
         batch_source = self.get_iterator('main').next()
         if 'tgt_annotation' in self._iterators.keys():
             batch_t_anno = self.get_iterator('tgt_annotation').next()
@@ -183,21 +195,31 @@ class Updater_CORAL(chainer.training.StandardUpdater):
         batch_target = xp.array(self.get_iterator('target').next())
         #batchsize = len(batch_source)
 
-        if self.device >=0: batch_target = chainer.cuda.to_gpu(batch_target,self.device)
-        #compute loss
-        arguments = [batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target]
+        #if self.device >=0: batch_target = chainer.cuda.to_gpu(batch_target,self.device)
+        arguments = {'s_imgs':batch_source_array[0], 'gt_mb_locs': batch_source_array[1], 'gt_mb_labels':batch_source_array[2],'t_imgs':batch_target}
         if 'tgt_annotation' in self._iterators.keys():
-            arguments.append(batch_t_anno)
+            arguments['t_anno'] = batch_t_anno
+
+        #compute ssd loss
+        arguments['mode'] = 'ssd'
+        #arguments = [batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target]
+
         #loss = self.loss_func(batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target)
-        loss = self.loss_func(*arguments)
-
-        batch_source_array = None
-        batch_target = None
-        batch_t_anno = None
-
-        self.loss_func.model.cleargrads()
+        loss = self.loss_func(**arguments)
+        loss_sum += loss.data
         loss.backward()
+        loss.unchain_backward()
+
+        #compute CORAL loss
+        arguments['mode'] = 'CORAL'
+        loss = self.loss_func(**arguments)
+        loss_sum += loss.data
+        loss.backward()
+        loss.unchain_backward()
+
         optimizer.update()
+
+        chainer.reporter.report({'loss': loss_sum}, self)
 
 class Transform(object):
 
