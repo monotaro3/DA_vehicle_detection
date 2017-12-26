@@ -191,6 +191,10 @@ class Updater_CORAL(chainer.training.StandardUpdater):
         #loss = self.loss_func(batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target)
         loss = self.loss_func(*arguments)
 
+        batch_source_array = None
+        batch_target = None
+        batch_t_anno = None
+
         self.loss_func.model.cleargrads()
         loss.backward()
         optimizer.update()
