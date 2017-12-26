@@ -219,7 +219,7 @@ class Updater_CORAL(chainer.training.StandardUpdater):
 
         optimizer.update()
 
-        chainer.reporter.report({'loss': loss_sum}, self)
+        chainer.reporter.report({'loss': loss_sum}, self.loss_func)
 
 class Transform(object):
 
