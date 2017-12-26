@@ -11,6 +11,7 @@ from chainer import serializers
 from chainer import training
 from chainer.training import extensions
 from chainer.training import triggers
+from chainer.dataset import convert
 
 from chainercv.datasets import voc_detection_label_names
 from chainercv.datasets import VOCDetectionDataset
@@ -133,6 +134,25 @@ class Transform(object):
 
         return img, mb_loc, mb_label
 
+class updater_st(chainer.training.StandardUpdater):
+    def __init__(self, iterator,optimizer,gpu):
+        super(updater_st, self).__init__(iterator, optimizer,device=gpu)
+
+    def update_core(self):
+        batch = self._iterators['main'].next()
+        batch.extend(self._iterators['target'].next())
+        in_arrays = self.converter(batch, self.device)
+
+        optimizer = self._optimizers['main']
+        loss_func = self.loss_func or optimizer.target
+
+        if isinstance(in_arrays, tuple):
+            in_vars = tuple(chainer.variable.Variable(x) for x in in_arrays)
+            optimizer.update(loss_func, *in_vars)
+        else:
+            in_var = chainer.variable.Variable(in_arrays)
+            optimizer.update(loss_func, in_var)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -141,12 +161,16 @@ def main():
     parser.add_argument(
         '--resolution', type=float, choices=(0.15,0.16,0.3), default=0.15)
     parser.add_argument('--batchsize', type=int, default=32)
+    parser.add_argument('--iteration', type=int, default=120000)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
     parser.add_argument('--resume')
     parser.add_argument('--resumemodel')
     parser.add_argument('--datadir')
+    parser.add_argument('--target_data')
+    parser.add_argument('--s_t_ratio',type=tuple)
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
+    parser.add_argument('--wd_schedule', type=tuple, default=(80000,100000))
     args = parser.parse_args()
 
     batchsize = args.batchsize
@@ -178,8 +202,6 @@ def main():
             n_fg_class=len(vehicle_classes),
             pretrained_model='imagenet',defaultbox_size=defaultbox_size_512[args.resolution])
 
-    # if args.resumemodel:
-    #     serializers.load_npz(resume, model)
 
     model.use_preset('evaluate')
     train_chain = MultiboxTrainChain(model)
@@ -187,14 +209,39 @@ def main():
         chainer.cuda.get_device_from_id(gpu).use()
         model.to_gpu()
 
-    s_train = TransformDataset(
-        # ConcatenatedDataset(
-        #     VOCDetectionDataset(year='2007', split='trainval'),
-        #     VOCDetectionDataset(year='2012', split='trainval')
-        # ),
-        COWC_dataset_processed(split="train",datadir=args.datadir),
-        Transform(model.coder, model.insize, model.mean))
-    s_train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+    if args.target_data:
+        if args.s_t_ratio:
+            s_batch = int(args.batchsize * args.s_t_ratio[0]/sum(args.s_t_ratio))
+            t_batch = args.batchsize - s_batch
+            if s_batch <= 0:
+                print("invalid batchsize")
+                exit(0)
+            s_train = TransformDataset(
+                COWC_dataset_processed(split="train", datadir=args.datadir),
+                Transform(model.coder, model.insize, model.mean))
+            t_train = TransformDataset(
+                COWC_dataset_processed(split="train", datadir=args.target_data),
+                Transform(model.coder, model.insize, model.mean))
+            s_train_iter = chainer.iterators.MultiprocessIterator(s_train, s_batch)
+            t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batch)
+        else:
+            s_train = TransformDataset(
+                ConcatenatedDataset(
+                    COWC_dataset_processed(split="train", datadir=args.datadir),
+                    COWC_dataset_processed(split="train", datadir=args.target_data)
+                ),
+                #COWC_dataset_processed(split="train", datadir=args.datadir),
+                Transform(model.coder, model.insize, model.mean))
+            s_train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+    else:
+        s_train = TransformDataset(
+            # ConcatenatedDataset(
+            #     VOCDetectionDataset(year='2007', split='trainval'),
+            #     VOCDetectionDataset(year='2012', split='trainval')
+            # ),
+            COWC_dataset_processed(split="train",datadir=args.datadir),
+            Transform(model.coder, model.insize, model.mean))
+        s_train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
 
     # test = VOCDetectionDataset(
     #     year='2007', split='test',
@@ -212,11 +259,14 @@ def main():
         else:
             param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
-    updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
-    trainer = training.Trainer(updater, (120000, 'iteration'), out)
+    if args.target_data and args.s_t_ratio:
+        updater = updater_st({'main': s_train_iter, 'target':t_train_iter}, optimizer, gpu)
+    else:
+        updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
+    trainer = training.Trainer(updater, (args.iteration, 'iteration'), out)
     trainer.extend(
         extensions.ExponentialShift('lr', 0.1, init=1e-3),
-        trigger=triggers.ManualScheduleTrigger([80000, 100000], 'iteration'))
+        trigger=triggers.ManualScheduleTrigger(args.wd_schedule, 'iteration'))
 
     trainer.extend(
         DetectionVOCEvaluator(
@@ -237,15 +287,18 @@ def main():
     trainer.extend(extensions.snapshot(), trigger=(1000, 'iteration'))
     trainer.extend(
         extensions.snapshot_object(model, 'model_iter_{.updater.iteration}'),
-        trigger=(120000, 'iteration'))
+        trigger=(args.iteration, 'iteration'))
 
     if resume:
         serializers.load_npz(resume, trainer)
 
-    serializers.load_npz("model/snapshot_iter_300_0.16_55000", trainer)
-    serializers.save_npz("model/ssd_300_0.16_55000",trainer.updater._optimizers["main"].target.model)
+    # serializers.load_npz("model/snapshot_iter_300_0.16_55000", trainer)
+    # serializers.save_npz("model/ssd_300_0.16_55000",trainer.updater._optimizers["main"].target.model)
 
-    #trainer.run()
+    if args.resumemodel:
+        serializers.load_npz(args.resumemodel, model)
+
+    trainer.run()
 
     exectime = time.time() - exectime
     exectime_str = gen_dms_time_str(exectime)

@@ -13,7 +13,7 @@ from chainer.datasets import TransformDataset
 from SSD_for_vehicle_detection import *
 from DA_updater import *
 from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly, COWC_dataset_processed, vehicle_classes
-from SSD_training import  Transform
+from SSD_training import  Transform, ConcatenatedDataset
 from utils import initSSD
 from SSD_test import ssd_evaluator
 
@@ -66,6 +66,8 @@ def main():
     parser.add_argument('--resume', type=str, help='trainer snapshot path for resume')
     parser.add_argument('--bufsize', type=int, help='size of buffer for discriminator training')
     parser.add_argument('--bufmode', type=int, help='mode of buffer(0:align src and tgt, 1:not align, 2:sort by loss value)')
+    parser.add_argument('--tgt_anno_data', type=str, help='target anotation dataset directory')
+    parser.add_argument('--s_t_ratio',type=tuple)
 
     args = parser.parse_args()
 
@@ -96,6 +98,7 @@ def main():
     #         discriminator = common.net.DCGANDiscriminator()
     #     else:
     #         raise NotImplementedError()
+    s_batchsize = args.batchsize
 
     if args.mode in  ["DA1", "DA1_buf","DA1_buf_multibatch","DA_fix_dis"]:
         Updater = DA_updater1
@@ -110,9 +113,34 @@ def main():
         ssd_model = initSSD("ssd300",0.3,args.ssdpath)
         #target_encoder = ssd_model.extractor
         models = [discriminator, ssd_model]
-        source_dataset = TransformDataset(
-            COWC_dataset_processed(split="train", datadir=args.source_dataset),
-            Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
+        if args.tgt_anno_data:
+            if args.s_t_ratio:
+                s_batchsize = int(args.batchsize * args.s_t_ratio[0] / sum(args.s_t_ratio))
+                t_batchsize = args.batchsize - s_batchsize
+                if s_batchsize <= 0:
+                    print("invalid batchsize")
+                    exit(0)
+                source_dataset = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.source_dataset),
+                    Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
+                t_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.tgt_anno_data),
+                    Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
+                #train_iter1 = chainer.iterators.MultiprocessIterator(s_train, s_batchsize)
+                t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batchsize)
+            else:
+                source_dataset = TransformDataset(
+                    ConcatenatedDataset(
+                        COWC_dataset_processed(split="train", datadir=args.source_dataset),
+                        COWC_dataset_processed(split="train", datadir=args.tgt_anno_data)
+                    ),
+                    # COWC_dataset_processed(split="train", datadir=args.datadir),
+                    Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
+                #train_iter1 = chainer.iterators.MultiprocessIterator(s_train, args.batchsize)
+        else:
+            source_dataset = TransformDataset(
+                COWC_dataset_processed(split="train", datadir=args.source_dataset),
+                Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
         target_dataset = Dataset_imgonly(args.target_dataset)
 
     else:
@@ -138,10 +166,14 @@ def main():
 
     train_iter1 = chainer.iterators.MultiprocessIterator(source_dataset, args.batchsize)
     train_iter2 = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
+
     updater_args = {
         "iterator": {'main': train_iter1, 'target': train_iter2, },
         "device": args.gpu
     }
+
+    if args.tgt_anno_data and args.s_t_ratio:
+        updater_args['iterator']['tgt_annotation']= t_train_iter
 
     if args.mode in ["DA1_buf", "DA1_buf_multibatch"]:
         Updater = DA_updater1_buf

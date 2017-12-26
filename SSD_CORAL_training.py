@@ -89,17 +89,32 @@ class Multibox_CORAL_loss(chainer.Chain):
         self.CORAL_weight = CORAL_weight
         self.extractor = self.model.extractor
 
-    def __call__(self, s_imgs, gt_mb_locs, gt_mb_labels, t_imgs):
+    def __call__(self, s_imgs, gt_mb_locs, gt_mb_labels, t_imgs,t_anno = None):
         # mb_locs, mb_confs = self.model(s_imgs)
         # loc_loss, conf_loss = multibox_loss(
         #     mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
         # loss = loc_loss * self.alpha + conf_loss
+        xp = self.model.xp
 
+        s_batchsize=len(s_imgs)
         src_fmap = self.extractor(s_imgs)  # src feature map
-        mb_locs, mb_confs = self.model.multibox(src_fmap)
-        loc_loss, conf_loss = multibox_loss(
-            mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
-        cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
+        if t_anno:
+            t_anno_batchsize = len(t_anno[0])
+            t_anno_fmap = self.extractor(t_anno[0])
+            s_t_fmap = []
+            for i in range(len(t_anno_fmap)):
+                s_t_fmap.append(F.vstack(F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],self.device),t_anno_fmap[i]))
+            s_t_gt_mb_locs = xp.vstack(gt_mb_locs[:s_batchsize-t_anno_batchsize],t_anno[1])
+            s_t_gt_mb_labels = xp.vstack(gt_mb_labels[:s_batchsize-t_anno_batchsize],t_anno[2])
+            mb_locs, mb_confs = self.model.multibox(s_t_fmap)
+            loc_loss, conf_loss = multibox_loss(
+                mb_locs, mb_confs, s_t_gt_mb_locs, s_t_gt_mb_labels, self.k)
+            cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
+        else:
+            mb_locs, mb_confs = self.model.multibox(src_fmap)
+            loc_loss, conf_loss = multibox_loss(
+                mb_locs, mb_confs, gt_mb_locs, gt_mb_labels, self.k)
+            cls_loss = loc_loss * self.alpha + conf_loss  # cls loss
         batchsize_tgt = len(t_imgs)
 
         tgt_fmap = self.extractor(t_imgs)
@@ -160,13 +175,20 @@ class Updater_CORAL(chainer.training.StandardUpdater):
         xp = self.loss_func.xp
 
         batch_source = self.get_iterator('main').next()
+        if 'tgt_annotation' in self._iterators.keys():
+            batch_t_anno = self.get_iterator('tgt_annotation').next()
+            batch_t_anno = convert.concat_examples(batch_t_anno,self.device)
         batch_source_array = convert.concat_examples(batch_source,self.device)
         batch_target = xp.array(self.get_iterator('target').next())
-        batchsize = len(batch_source)
+        #batchsize = len(batch_source)
 
         if self.device >=0: batch_target = chainer.cuda.to_gpu(batch_target,self.device)
         #compute loss
-        loss = self.loss_func(batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target)
+        arguments = [batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target]
+        if 'tgt_annotation' in self._iterators.keys():
+            arguments.append(batch_t_anno)
+        #loss = self.loss_func(batch_source_array[0],batch_source_array[1],batch_source_array[2],batch_target)
+        loss = self.loss_func(*arguments)
 
         self.loss_func.model.cleargrads()
         loss.backward()
@@ -313,6 +335,8 @@ def main():
     parser.add_argument('--opt_mode',type=str,choices = ("Adam","MomentumSGD"))
     parser.add_argument('--CORAL_calculation', type=int, choices=(0,1,2)) # 0:pixelwise, 1:patchwise, 2:fmapwise
     parser.add_argument('--CORAL_weight', type=float)
+    parser.add_argument('--tgt_anno_data', type=str)
+    parser.add_argument('--s_t_ratio', type=tuple)
 
     args = parser.parse_args()
 
@@ -358,14 +382,39 @@ def main():
         chainer.cuda.get_device_from_id(gpu).use()
         model.to_gpu()
 
-    train = TransformDataset(
-        # ConcatenatedDataset(
-        #     VOCDetectionDataset(year='2007', split='trainval'),
-        #     VOCDetectionDataset(year='2012', split='trainval')
-        # ),
-        COWC_dataset_processed(split="train",datadir=args.datadir),
-        Transform(model.coder, model.insize, model.mean))
-    train_iter = chainer.iterators.MultiprocessIterator(train, batchsize)
+    if args.tgt_anno_data:
+        if args.s_t_ratio:
+            s_batchsize = int(args.batchsize * args.s_t_ratio[0] / sum(args.s_t_ratio))
+            t_batchsize = args.batchsize - s_batchsize
+            if s_batchsize <= 0:
+                print("invalid batchsize")
+                exit(0)
+            s_train = TransformDataset(
+                COWC_dataset_processed(split="train", datadir=args.datadir),
+                Transform(model.coder, model.insize, model.mean))
+            t_train = TransformDataset(
+                COWC_dataset_processed(split="train", datadir=args.tgt_anno_data),
+                Transform(model.coder, model.insize, model.mean))
+            train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+            t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batchsize)
+        else:
+            s_train = TransformDataset(
+                ConcatenatedDataset(
+                    COWC_dataset_processed(split="train", datadir=args.datadir),
+                    COWC_dataset_processed(split="train", datadir=args.tgt_anno_data)
+                ),
+                # COWC_dataset_processed(split="train", datadir=args.datadir),
+                Transform(model.coder, model.insize, model.mean))
+            train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+    else:
+        train = TransformDataset(
+            # ConcatenatedDataset(
+            #     VOCDetectionDataset(year='2007', split='trainval'),
+            #     VOCDetectionDataset(year='2012', split='trainval')
+            # ),
+            COWC_dataset_processed(split="train",datadir=args.datadir),
+            Transform(model.coder, model.insize, model.mean))
+        train_iter = chainer.iterators.MultiprocessIterator(train, batchsize)
 
     # test = VOCDetectionDataset(
     #     year='2007', split='test',
@@ -394,6 +443,10 @@ def main():
         "iterator": {'main': train_iter, 'target': target_iter, },
         "device": args.gpu
     }
+
+    if args.tgt_anno_data and args.s_t_ratio:
+        updater_args['iterator']['tgt_annotation']= t_train_iter
+
     updater_args["optimizer"] = optimizer
     updater_args["loss_func"] = train_chain
 
