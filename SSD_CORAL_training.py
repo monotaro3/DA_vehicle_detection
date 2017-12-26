@@ -336,7 +336,7 @@ def main():
     parser.add_argument('--CORAL_calculation', type=int, choices=(0,1,2)) # 0:pixelwise, 1:patchwise, 2:fmapwise
     parser.add_argument('--CORAL_weight', type=float)
     parser.add_argument('--tgt_anno_data', type=str)
-    parser.add_argument('--s_t_ratio', type=tuple)
+    parser.add_argument('--s_t_ratio', type=int, nargs=2)
 
     args = parser.parse_args()
 

@@ -67,7 +67,7 @@ def main():
     parser.add_argument('--bufsize', type=int, help='size of buffer for discriminator training')
     parser.add_argument('--bufmode', type=int, help='mode of buffer(0:align src and tgt, 1:not align, 2:sort by loss value)')
     parser.add_argument('--tgt_anno_data', type=str, help='target anotation dataset directory')
-    parser.add_argument('--s_t_ratio',type=tuple)
+    parser.add_argument('--s_t_ratio',type=int, nargs=2)
 
     args = parser.parse_args()
 
