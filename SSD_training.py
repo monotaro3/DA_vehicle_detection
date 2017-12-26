@@ -161,6 +161,7 @@ def main():
     parser.add_argument(
         '--resolution', type=float, choices=(0.15,0.16,0.3), default=0.15)
     parser.add_argument('--batchsize', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--iteration', type=int, default=120000)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
@@ -265,7 +266,7 @@ def main():
         updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out)
     trainer.extend(
-        extensions.ExponentialShift('lr', 0.1, init=1e-3),
+        extensions.ExponentialShift('lr', 0.1, init=args.lr),
         trigger=triggers.ManualScheduleTrigger(args.wd_schedule, 'iteration'))
 
     trainer.extend(
