@@ -780,8 +780,8 @@ class DA_updater1_buf_2_t_anno(chainer.training.StandardUpdater):
                     src_fmap_ = []
                     for i in range(len(src_fmap)):
                         # src_fmap[i] = Variable(xp.vstack((src_fmap[i][0:batchsize - size], func_bGPU(e_buf_src[i]))))
-                        src_fmap_.append(F.vstack(
-                            F.copy(src_fmap[i][0:batchsize - t_anno_batchsize], self.device), tgt_anno_fmap[i]))
+                        src_fmap_.append(F.vstack((
+                            F.copy(src_fmap[i][0:batchsize - t_anno_batchsize], self.device), tgt_anno_fmap[i])))
                     gt_locs = xp.vstack(batch_source_array[1][:batchsize-t_anno_batchsize], batch_tgt_anno_array[1])
                     gt_labels = xp.vstack(batch_source_array[2][:batchsize - t_anno_batchsize], batch_tgt_anno_array[2])
                 else:
@@ -823,8 +823,8 @@ class DA_updater1_buf_2_t_anno(chainer.training.StandardUpdater):
                     src_fmap_ = []
                     for i in range(len(src_fmap)):
                         # src_fmap[i] = Variable(xp.vstack((src_fmap[i][0:batchsize - size], func_bGPU(e_buf_src[i]))))
-                        src_fmap_.append(F.vstack(
-                            F.copy(src_fmap[i][0:batchsize - t_anno_batchsize], self.device), tgt_anno_fmap[i]))
+                        src_fmap_.append(F.vstack((
+                            F.copy(src_fmap[i][0:batchsize - t_anno_batchsize], self.device), tgt_anno_fmap[i])))
                     gt_locs = xp.vstack(batch_source_array[1][:batchsize-t_anno_batchsize], batch_tgt_anno_array[1])
                     gt_labels = xp.vstack(batch_source_array[2][:batchsize - t_anno_batchsize], batch_tgt_anno_array[2])
                 else:
