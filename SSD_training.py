@@ -169,9 +169,9 @@ def main():
     parser.add_argument('--resumemodel')
     parser.add_argument('--datadir')
     parser.add_argument('--target_data')
-    parser.add_argument('--s_t_ratio',type=tuple)
+    parser.add_argument('--s_t_ratio',type=int, nargs=2)
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
-    parser.add_argument('--lrdecay_schedule', type=tuple, default=(80000,100000))
+    parser.add_argument('--lrdecay_schedule', nargs = '*', type=int, default=[80000,100000])
     args = parser.parse_args()
 
     batchsize = args.batchsize
@@ -263,12 +263,12 @@ def main():
         updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out)
 
-    if args.lrdecay_schedule:
+    if args.lrdecay_schedule[0] == -1:
+        optimizer.hyperparam.lr = args.lr
+    else:
         trainer.extend(
             extensions.ExponentialShift('lr', 0.1, init=args.lr),
             trigger=triggers.ManualScheduleTrigger(list(args.lrdecay_schedule), 'iteration'))
-    else:
-        optimizer.hyperparam.lr = args.lr
 
     trainer.extend(
         DetectionVOCEvaluator(
