@@ -79,7 +79,7 @@ class ConcatenatedDataset(chainer.dataset.DatasetMixin):
 
 class Multibox_CORAL_loss(chainer.Chain):
 
-    def __init__(self, model, CORAL_calculation = 0,CORAL_weight=1, alpha=1, k=3):
+    def __init__(self, model, CORAL_calculation = 0,CORAL_weight=1, alpha=1, k=3,device=-1):
         super( Multibox_CORAL_loss, self).__init__()
         with self.init_scope():
             self.model = model
@@ -88,6 +88,7 @@ class Multibox_CORAL_loss(chainer.Chain):
         self.CORAL_calculation = CORAL_calculation
         self.CORAL_weight = CORAL_weight
         self.extractor = self.model.extractor
+        self.device = device
 
     def __call__(self, s_imgs, gt_mb_locs, gt_mb_labels, t_imgs,t_anno = None):
         # mb_locs, mb_confs = self.model(s_imgs)
@@ -103,7 +104,7 @@ class Multibox_CORAL_loss(chainer.Chain):
             t_anno_fmap = self.extractor(t_anno[0])
             s_t_fmap = []
             for i in range(len(t_anno_fmap)):
-                s_t_fmap.append(F.vstack(F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],chainer.cuda.get_device(src_fmap[i].data)),t_anno_fmap[i]))
+                s_t_fmap.append(F.vstack(F.copy(src_fmap[i][0:s_batchsize - t_anno_batchsize],self.device),t_anno_fmap[i]))
             s_t_gt_mb_locs = xp.vstack(gt_mb_locs[:s_batchsize-t_anno_batchsize],t_anno[1])
             s_t_gt_mb_labels = xp.vstack(gt_mb_labels[:s_batchsize-t_anno_batchsize],t_anno[2])
             mb_locs, mb_confs = self.model.multibox(s_t_fmap)
@@ -377,7 +378,7 @@ def main():
         serializers.load_npz(args.model_init, model)
 
     model.use_preset('evaluate')
-    train_chain =  Multibox_CORAL_loss(model,args.CORAL_calculation,args.CORAL_weight)
+    train_chain =  Multibox_CORAL_loss(model,args.CORAL_calculation,args.CORAL_weight,device=gpu)
     if gpu >= 0:
         chainer.cuda.get_device_from_id(gpu).use()
         model.to_gpu()
