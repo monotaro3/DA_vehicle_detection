@@ -411,19 +411,25 @@ def main():
 
     if args.tgt_anno_data:
         if args.s_t_ratio:
-            s_batchsize = int(args.batchsize * args.s_t_ratio[0] / sum(args.s_t_ratio))
-            t_batchsize = args.batchsize - s_batchsize
-            if s_batchsize <= 0:
-                print("invalid batchsize")
-                exit(0)
-            s_train = TransformDataset(
-                COWC_dataset_processed(split="train", datadir=args.datadir),
-                Transform(model.coder, model.insize, model.mean))
-            t_train = TransformDataset(
-                COWC_dataset_processed(split="train", datadir=args.tgt_anno_data),
-                Transform(model.coder, model.insize, model.mean))
-            train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
-            t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batchsize)
+            if args.s_t_ratio[0] == 0:
+                s_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.tgt_anno_data),
+                    Transform(model.coder, model.insize, model.mean))
+                train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+            else:
+                s_batchsize = int(args.batchsize * args.s_t_ratio[0] / sum(args.s_t_ratio))
+                t_batchsize = args.batchsize - s_batchsize
+                if s_batchsize <= 0:
+                    print("invalid batchsize")
+                    exit(0)
+                s_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.datadir),
+                    Transform(model.coder, model.insize, model.mean))
+                t_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.tgt_anno_data),
+                    Transform(model.coder, model.insize, model.mean))
+                train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+                t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batchsize)
         else:
             s_train = TransformDataset(
                 ConcatenatedDataset(
@@ -471,7 +477,7 @@ def main():
         "device": args.gpu
     }
 
-    if args.tgt_anno_data and args.s_t_ratio:
+    if args.tgt_anno_data and args.s_t_ratio and args.s_t_ratio[0] != 0:
         updater_args['iterator']['tgt_annotation']= t_train_iter
 
     updater_args["optimizer"] = optimizer
