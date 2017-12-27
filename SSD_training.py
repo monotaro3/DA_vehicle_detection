@@ -209,19 +209,25 @@ def main():
 
     if args.target_data:
         if args.s_t_ratio:
-            s_batch = int(args.batchsize * args.s_t_ratio[0]/sum(args.s_t_ratio))
-            t_batch = args.batchsize - s_batch
-            if s_batch <= 0:
-                print("invalid batchsize")
-                exit(0)
-            s_train = TransformDataset(
-                COWC_dataset_processed(split="train", datadir=args.datadir),
-                Transform(model.coder, model.insize, model.mean))
-            t_train = TransformDataset(
-                COWC_dataset_processed(split="train", datadir=args.target_data),
-                Transform(model.coder, model.insize, model.mean))
-            s_train_iter = chainer.iterators.MultiprocessIterator(s_train, s_batch)
-            t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batch)
+            if args.s_t_ratio[0] == 0:
+                s_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.target_data),
+                    Transform(model.coder, model.insize, model.mean))
+                s_train_iter = chainer.iterators.MultiprocessIterator(s_train, batchsize)
+            else:
+                s_batch = int(args.batchsize * args.s_t_ratio[0]/sum(args.s_t_ratio))
+                t_batch = args.batchsize - s_batch
+                if s_batch <= 0:
+                    print("invalid batchsize")
+                    exit(0)
+                s_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.datadir),
+                    Transform(model.coder, model.insize, model.mean))
+                t_train = TransformDataset(
+                    COWC_dataset_processed(split="train", datadir=args.target_data),
+                    Transform(model.coder, model.insize, model.mean))
+                s_train_iter = chainer.iterators.MultiprocessIterator(s_train, s_batch)
+                t_train_iter = chainer.iterators.MultiprocessIterator(t_train, t_batch)
         else:
             s_train = TransformDataset(
                 ConcatenatedDataset(
@@ -260,7 +266,7 @@ def main():
         else:
             param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
-    if args.target_data and args.s_t_ratio:
+    if args.target_data and args.s_t_ratio and args.s_t_ratio[0] != 0:
         updater = updater_st({'main': s_train_iter, 'target':t_train_iter}, optimizer, gpu)
     else:
         updater = training.StandardUpdater(s_train_iter, optimizer, device=gpu)
