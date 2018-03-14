@@ -7,6 +7,9 @@ import chainer
 from chainer import Chain, initializers
 import chainer.links as L
 import chainer.functions as F
+from chainercv import utils
+from chainer import Variable
+from chainercv.links.model.ssd.multibox_coder import _unravel_index
 
 
 defaultbox_size_300 = {
@@ -19,6 +22,222 @@ defaultbox_size_512 = {
     0.16: (30.72, 46.08, 129.02, 211.97, 294.91, 377.87, 460.8, 543.74),
     0.3: (25.6, 30.72, 116.74, 202.75, 288.79, 374.78, 460.8, 546.82),
 }  # defaultbox size corresponding to the image resolution
+
+def ssd_predict_variable(ssd_model, imgs):
+    x = list()
+    sizes = list()
+    for img in imgs:
+        _, H, W = img.shape
+        img = ssd_model._prepare(img)
+        x.append(ssd_model.xp.array(img))
+        sizes.append((H, W))
+
+    x = chainer.Variable(ssd_model.xp.stack(x))
+    mb_locs, mb_confs = ssd_model(x)
+
+    bboxes = list()
+    labels = list()
+    scores = list()
+    for mb_loc, mb_conf, size in zip(mb_locs, mb_confs, sizes):
+        # bbox, label, score = self.coder.decode(
+        #     mb_loc, mb_conf, self.nms_thresh, self.score_thresh)
+        # bbox = transforms.resize_bbox(
+        #     bbox, (self.insize, self.insize), size)
+        # bboxes.append(chainer.cuda.to_cpu(bbox))
+        # labels.append(chainer.cuda.to_cpu(label))
+        # scores.append(chainer.cuda.to_cpu(score))
+        bbox, label, score = multibox_decode_variable(ssd_model.coder, mb_loc, mb_conf, ssd_model.nms_thresh, ssd_model.score_thresh)
+        bbox = resize_bbox_variable(bbox, (ssd_model.insize, ssd_model.insize), size)
+        bboxes.append(bbox)
+        labels.append(label)
+        scores.append(score)
+
+    return bboxes, labels, scores
+
+
+def multibox_decode_variable(coder, mb_loc, mb_conf, nms_thresh=0.45, score_thresh=0.6):
+    # xp = self.xp
+    #
+    # # (center_y, center_x, height, width)
+    # mb_bbox = self._default_bbox.copy()
+    # mb_bbox[:, :2] += mb_loc[:, :2] * self._variance[0] \
+    #                   * self._default_bbox[:, 2:]
+    # mb_bbox[:, 2:] *= xp.exp(mb_loc[:, 2:] * self._variance[1])
+    #
+    # # (center_y, center_x, height, width) -> (y_min, x_min, height, width)
+    # mb_bbox[:, :2] -= mb_bbox[:, 2:] / 2
+    # # (center_y, center_x, height, width) -> (y_min, x_min, y_max, x_max)
+    # mb_bbox[:, 2:] += mb_bbox[:, :2]
+    xp = coder.xp
+    mb_bbox_former = Variable(coder._default_bbox.copy().astype('f')[:,:2])
+    mb_bbox_latter = Variable(coder._default_bbox.copy().astype('f')[:, 2:])
+    mb_bbox_former += mb_loc[:, :2] * coder._variance[0] \
+                          * coder._default_bbox[:, 2:]
+    mb_bbox_latter *= F.exp(mb_loc[:, 2:] * coder._variance[1])
+    mb_bbox_former -= mb_bbox_latter/2
+    mb_bbox_latter += mb_bbox_former
+
+    mb_bbox = F.hstack((mb_bbox_former,mb_bbox_latter))
+
+    # mb_score = xp.exp(mb_conf)
+    # mb_score /= mb_score.sum(axis=1, keepdims=True)
+    mb_score = F.exp(mb_conf)
+    mb_score /= F.hstack((F.sum(mb_score, axis=1, keepdims=True),)*2)
+
+    bbox = list()
+    label = list()
+    score = list()
+    # for l in range(mb_conf.shape[1] - 1):
+    #     bbox_l = mb_bbox
+    #     # the l-th class corresponds for the (l + 1)-th column.
+    #     score_l = mb_score[:, l + 1]
+    #
+    #     mask = score_l >= score_thresh
+    #     bbox_l = bbox_l[mask]
+    #     score_l = score_l[mask]
+    #
+    #     if nms_thresh is not None:
+    #         indices = utils.non_maximum_suppression(
+    #             bbox_l, nms_thresh, score_l)
+    #         bbox_l = bbox_l[indices]
+    #         score_l = score_l[indices]
+    #
+    #     bbox.append(bbox_l)
+    #     label.append(xp.array((l,) * len(bbox_l)))
+    #     score.append(score_l)
+    for l in range(mb_conf.shape[1] - 1):
+        # score_l_ = mb_score[:, l + 1]
+        # mask = score_l_.data >= score_thresh
+        # if (mask == False).all():
+        #     bbox_l = chainer.Variable(xp.array(()).astype('f'))
+        #     score_l = chainer.Variable(xp.array(()).astype('f'))
+        # else:
+        #     bbox_l = []
+        #     score_l = []
+        #     for i in range(len(mask)):
+        #         if mask[i]:
+        #             bbox_l.append()
+        bbox_l = mb_bbox
+        # the l-th class corresponds for the (l + 1)-th column.
+        score_l = mb_score[:, l + 1]
+
+        mask = score_l.data >= score_thresh
+        bbox_l = bbox_l[mask]
+        score_l = score_l[mask]
+        if nms_thresh is not None:
+            indices = utils.non_maximum_suppression(
+                        bbox_l.data, nms_thresh, score_l.data)
+            bbox_l = bbox_l[indices]
+            score_l = score_l[indices]
+        bbox.append(bbox_l)
+        label.append(Variable(xp.array((l,) * len(bbox_l))))
+        score.append(score_l)
+    # bbox = xp.vstack(bbox).astype(np.float32)
+    # label = xp.hstack(label).astype(np.int32)
+    # score = xp.hstack(score).astype(np.float32)
+    bbox = F.vstack(bbox)
+    label = F.hstack(label)
+    score = F.hstack(score)
+
+    return bbox, label, score
+
+def multibox_encode_variable(coder, bbox, label, iou_thresh=0.5):
+    xp = coder.xp
+
+    if len(bbox) == 0:
+        return (
+            xp.zeros(coder._default_bbox.shape, dtype=np.float32),
+            xp.zeros(coder._default_bbox.shape[0], dtype=np.int32))
+
+    _default_bbox = coder._default_bbox.copy()
+    # if xp != np:
+    #     _default_bbox = chainer.cuda.to_cpu(_default_bbox)
+
+    iou = utils.bbox_iou(
+        xp.hstack((
+            coder._default_bbox[:, :2] - coder._default_bbox[:, 2:] / 2,
+            coder._default_bbox[:, :2] + coder._default_bbox[:, 2:] / 2)),
+        bbox.data)
+
+    index = xp.empty(len(coder._default_bbox), dtype=int)
+    # -1 is for background
+    index[:] = -1
+
+    masked_iou = iou.copy()
+    while True:
+        i, j = _unravel_index(masked_iou.argmax(), masked_iou.shape)
+        if masked_iou[i, j] <= 1e-6:
+            break
+        index[i] = j
+        masked_iou[i, :] = 0
+        masked_iou[:, j] = 0
+
+    mask = xp.logical_and(index < 0, iou.max(axis=1) >= iou_thresh)
+    if xp.count_nonzero(mask) > 0:
+        index[mask] = iou[mask].argmax(axis=1)
+
+    # mb_bbox = bbox[index].copy()
+    # # (y_min, x_min, y_max, x_max) -> (y_min, x_min, height, width)
+    # mb_bbox[:, 2:] -= mb_bbox[:, :2]
+    # # (y_min, x_min, height, width) -> (center_y, center_x, height, width)
+    # mb_bbox[:, :2] += mb_bbox[:, 2:] / 2
+    #
+    # mb_loc = xp.empty_like(mb_bbox)
+    # mb_loc[:, :2] = (mb_bbox[:, :2] - self._default_bbox[:, :2]) / \
+    #                 (self._variance[0] * self._default_bbox[:, 2:])
+    # mb_loc[:, 2:] = xp.log(mb_bbox[:, 2:] / self._default_bbox[:, 2:]) / \
+    #                 self._variance[1]
+    #
+    # # [0, n_fg_class - 1] -> [1, n_fg_class]
+    # mb_label = label[index] + 1
+    # # 0 is for background
+    # mb_label[index < 0] = 0
+    mb_bbox = bbox[index]
+    mb_bbox_former = mb_bbox[:, :2]
+    mb_bbox_latter = mb_bbox[:, 2:]
+    mb_bbox_latter -= mb_bbox_former
+    mb_bbox_former += mb_bbox_latter/2
+    mb_loc_former = (mb_bbox_former - coder._default_bbox[:, :2]) / \
+                    (coder._variance[0] * coder._default_bbox[:, 2:])
+    mb_loc_latter = F.log(mb_bbox_latter / coder._default_bbox[:, 2:]) / \
+                    coder._variance[1]
+    mb_loc = F.hstack((mb_loc_former, mb_loc_latter))
+    mb_label = label[index] + 1
+    mb_label = F.where(index < 0, Variable(xp.zeros(mb_label.shape).astype(mb_label.data.dtype)),mb_label)
+
+    return mb_loc, mb_label
+
+def resize_bbox_variable(bbox, in_size, out_size):
+    """Resize bounding boxes according to image resize.
+
+    The bounding boxes are expected to be packed into a two dimensional
+    tensor of shape :math:`(R, 4)`, where :math:`R` is the number of
+    bounding boxes in the image. The second axis represents attributes of
+    the bounding box. They are :obj:`(y_min, x_min, y_max, x_max)`,
+    where the four attributes are coordinates of the top left and the
+    bottom right vertices.
+
+    Args:
+        bbox (~numpy.ndarray): An array whose shape is :math:`(R, 4)`.
+            :math:`R` is the number of bounding boxes.
+        in_size (tuple): A tuple of length 2. The height and the width
+            of the image before resized.
+        out_size (tuple): A tuple of length 2. The height and the width
+            of the image after resized.
+
+    Returns:
+        ~numpy.ndarray:
+        Bounding boxes rescaled according to the given image shapes.
+
+    """
+    # bbox = bbox.copy()
+    y_scale = float(out_size[0]) / in_size[0]
+    x_scale = float(out_size[1]) / in_size[1]
+    bbox_0 = F.expand_dims(y_scale * bbox[:, 0],axis=1)
+    bbox_2 = F.expand_dims(y_scale * bbox[:, 2],axis=1)
+    bbox_1 = F.expand_dims(x_scale * bbox[:, 1],axis=1)
+    bbox_3 = F.expand_dims(x_scale * bbox[:, 3],axis=1)
+    return F.hstack((bbox_0,bbox_1,bbox_2,bbox_3))
 
 class SSD512_vd(SSD512):
     def __init__(self, n_fg_class=None, pretrained_model=None,defaultbox_size=(35.84, 76.8, 153.6, 230.4, 307.2, 384.0, 460.8, 537.6),mean = _imagenet_mean):
