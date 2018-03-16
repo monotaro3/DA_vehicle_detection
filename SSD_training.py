@@ -13,8 +13,8 @@ from chainer.training import extensions
 from chainer.training import triggers
 from chainer.dataset import convert
 
-from chainercv.datasets import voc_detection_label_names
-from chainercv.datasets import VOCDetectionDataset
+# from chainercv.datasets import voc_detection_label_names
+# from chainercv.datasets import VOCDetectionDataset
 from chainercv.extensions import DetectionVOCEvaluator
 from chainercv.links.model.ssd import GradientScaling
 from chainercv.links.model.ssd import multibox_loss
