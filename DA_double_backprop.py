@@ -22,9 +22,10 @@ def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
     if len(layer_s._params) > 0:
         for p in layer_s._params:
             _grad_var = layer_s.__dict__[p].grad_var
-            grad_var = F.copy(_grad_var,dst)
-            with cupy.cuda.Device(dst):
-                layer_t.__dict__[p] += grad_var * lr
+            if _grad_var is not None:
+                grad_var = F.copy(_grad_var,dst)
+                with cupy.cuda.Device(dst):
+                    layer_t.__dict__[p] += grad_var * lr
     if '_children' in layer_s.__dict__:
         if len(layer_s._children) > 0:
             for c in layer_s._children:
