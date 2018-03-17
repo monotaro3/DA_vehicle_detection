@@ -55,6 +55,11 @@ class Updater_dbp(chainer.training.StandardUpdater):
         batch_unlabeled = self.get_iterator('target').next()
         batchsize = len(batch_labeled)
 
+        self.model_1.cleargrads()
+        self.model_2.cleargrads()
+        self.model_3.cleargrads()
+        self.model_4.cleargrads()
+
         # batch_unlabeled_array_g0 = convert.concat_examples(batch_unlabeled, 0)
         if self.loss_mode == 0:
             bboxes, labels, scores = ssd_predict_variable(self.model_1, batch_unlabeled)
@@ -122,19 +127,14 @@ class Updater_dbp(chainer.training.StandardUpdater):
         chainer.reporter.report(
             {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss})
 
-        self.model_4.cleardrads()
         self.model_4.addgrads(self.model_2)
         opt_model_4.update()
 
-        self.model_1.cleargrads()
         loss_model_3.backward()
         opt_model_1.update()
 
         loss_model_2.unchain_backward()
         loss_model_3.unchain_backward()
-
-        self.model_2.cleargrads()
-        self.model_3.cleargrads()
 
         self.model_2.copyparams(self.model_4)
         self.model_3.copyparams(self.model_4)
