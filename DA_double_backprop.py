@@ -13,30 +13,33 @@ from chainercv.extensions import DetectionVOCEvaluator
 from chainer.dataset import convert
 from SSD_for_vehicle_detection import ssd_predict_variable, resize_bbox_variable, multibox_encode_variable
 import chainer.functions as F
+import os
+from SSD_test import ssd_evaluator
 
-def _recursive_transfer_grad_var(layer_s, layer_t,dst):
+def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
+    #Source and target models (roots of layer_s and layer_t) must have exactly the same structure.
     if len(layer_s._params) > 0:
         for p in layer_s._params:
-            # print(p)
             _grad_var = layer_s.__dict__[p].grad_var
             grad_var = F.copy(_grad_var,dst)
-            layer_t.__dict__[p] += grad_var
+            layer_t.__dict__[p] += grad_var * lr
     if '_children' in layer_s.__dict__:
         if len(layer_s._children) > 0:
             for c in layer_s._children:
                 if isinstance(c,str):
-                    _recursive_transfer_grad_var(layer_s.__dict__[c],layer_t.__dict__[c],dst)
+                    recursive_transfer_grad_var(layer_s.__dict__[c],layer_t.__dict__[c],dst,lr)
                 else:
-                    _recursive_transfer_grad_var(c,layer_t._children[layer_s._children.index(c)],dst)
+                    recursive_transfer_grad_var(c,layer_t._children[layer_s._children.index(c)],dst,lr)
 
-def recursive_transfer_grad_var(model_source, model_target,dst):
-    #model_source and model_target must have exactly the same structure
-    _recursive_transfer_grad_var(model_source, model_target,dst)
+# def recursive_transfer_grad_var(model_source, model_target,dst,lr):
+#     #model_source and model_target must have exactly the same structure
+#     _recursive_transfer_grad_var(model_source, model_target,dst,lr)
 
 class Updater_dbp(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         self.model_1, self.model_2, self.model_3, self.model_4 =  kwargs.pop('models')
         self.loss_mode = kwargs.pop('loss_mode')
+        self.lr =  kwargs.pop('lr')
         super(Updater_dbp, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
@@ -46,7 +49,6 @@ class Updater_dbp(chainer.training.StandardUpdater):
         opt_model_4 = self.get_optimizer('opt_model_4')
 
         batch_labeled = self.get_iterator('main').next()
-        batch_labeled_array = convert.concat_examples(batch_labeled, 2)
         batch_unlabeled = self.get_iterator('target').next()
         batchsize = len(batch_labeled)
 
@@ -62,48 +64,59 @@ class Updater_dbp(chainer.training.StandardUpdater):
             mb_locs_l = F.stack(mb_locs_l)
             mb_labels_l = F.stack(mb_labels_l)
         else:
-            x = list()
-            sizes = list()
-            for img in batch_unlabeled:
-                _, H, W = img.shape
-                img = self.model_1._prepare(img)
-                x.append(self.model_1.xp.array(img))
-                sizes.append((H, W))
+            # x = list()
+            # sizes = list()
+            # for img in batch_unlabeled:
+            #     _, H, W = img.shape
+            #     img = self.model_1._prepare(img)
+            #     x.append(self.model_1.xp.array(img))
+            #     sizes.append((H, W))
+            #
+            # x = chainer.Variable(self.model_1.xp.stack(x))
+            # mb_locs_l, mb_labels_l = self.model_1(x)
+            mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
 
-            x = chainer.Variable(self.model_1.xp.stack(x))
-            mb_locs_l, mb_labels_l = self.model_1(x)
+        mb_locs_l_g1 = F.copy(mb_locs_l,dst=1)
+        mb_labels_l_g1 = F.copy(mb_labels_l,dst=1)
 
-        mb_locs_l_g1 = F.copy(mb_locs_l,1)
-        mb_labels_l_g1 = F.copy(mb_labels_l,1)
-
-        x = list()
-        sizes = list()
-        for img in batch_unlabeled:
-            _, H, W = img.shape
-            img = self.model_2._prepare(img)
-            x.append(self.model_2.xp.array(img))
-            sizes.append((H, W))
-
-        x = chainer.Variable(self.model_2.xp.stack(x))
-        mb_locs, mb_confs = self.model_2(x)
+        # x = list()
+        # sizes = list()
+        # for img in batch_unlabeled:
+        #     _, H, W = img.shape
+        #     img = self.model_2._prepare(img)
+        #     x.append(self.model_2.xp.array(img))
+        #     sizes.append((H, W))
+        #
+        # x = chainer.Variable(self.model_2.xp.stack(x))
+        # mb_locs, mb_confs = self.model_2(x)
+        mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
 
         loc_loss, conf_loss = multibox_loss(
             mb_locs, mb_confs, mb_locs_l_g1, mb_labels_l_g1, self.k)
         loss_model_2 = loc_loss * self.alpha + conf_loss
 
+        chainer.reporter.report(
+            {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss},
+            self)
+
         params = []
-        g_param = self.model_1.params()
-        for param in g_param:
+        param_generator = self.model_2.params()
+        for param in param_generator:
             params.append(param)
 
         gradients = chainer.grad([loss_model_2], params,set_grad=True, enable_double_backprop=True)
 
-        recursive_transfer_grad_var(self.model_2, self.model_3,2)
+        recursive_transfer_grad_var(self.model_2, self.model_3,dst=2, lr=self.lr)
 
+        batch_labeled_array = convert.concat_examples(batch_labeled, 2)
         mb_locs, mb_confs = self.model_3(batch_labeled_array[0])
         loc_loss, conf_loss = multibox_loss(
             mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
         loss_model_3 = loc_loss * self.alpha + conf_loss  # cls loss
+
+        chainer.reporter.report(
+            {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss},
+            self)
 
         self.model_4.cleardrads()
         self.model_4.addgrads(self.model_2)
@@ -122,10 +135,6 @@ class Updater_dbp(chainer.training.StandardUpdater):
         self.model_2.copyparams(self.model_4)
         self.model_3.copyparams(self.model_4)
 
-
-
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -138,14 +147,16 @@ def main():
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
     parser.add_argument('--resume')
-    parser.add_argument('--optimizer',type=str,default='momentum_SGD',choices=['momentum_SGD','Adam'])
+    parser.add_argument('--optimizer',type=str,default='Momentum_SGD',choices=['Momentum_SGD','Adam'])
     parser.add_argument('--model_init_1', type=str, help='model1 to be loaded')
     parser.add_argument('--model_init_2', type=str, help='model2 to be loaded')
     parser.add_argument('--dataset_labeled', type=str, help='data with labels')
     parser.add_argument('--dataset_unlabled', type=str, help='data without labels')
+    parser.add_argument('--target_valdata', type=str, help='dir of labeled target images for validation')
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
     parser.add_argument('--lrdecay_schedule', nargs = '*', type=int, default=[80000,100000])
     parser.add_argument('--loss_mode', type=int, default=0, choices = [0,1])
+    parser.add_argument('--eval_tgt_itr', type=int,default=100)
 
     args = parser.parse_args()
 
@@ -158,7 +169,7 @@ def main():
     model_1.to_gpu(0)
     model_2.to_gpu(1)
     model_3.to_gpu(2)
-    model_3.to_gpu(3)
+    model_4.to_gpu(3)
 
     dataset_labeled = TransformDataset(COWC_dataset_processed(split="train", datadir=args.dataset_labeled),
                         Transform(model_1.coder, model_1.insize, model_1.mean))
@@ -171,7 +182,7 @@ def main():
     test_iter = chainer.iterators.SerialIterator(
         test, args.batchsize, repeat=False, shuffle=False)
 
-    if args.optimizer == 'momentum_SGD':
+    if args.optimizer == 'Momentum_SGD':
         optimizer1 = chainer.optimizers.MomentumSGD(args.lr)
         optimizer4 = chainer.optimizers.MomentumSGD(args.lr)
         optimizer1.setup(model_1)
@@ -194,10 +205,11 @@ def main():
         # "device": args.gpu
         'loss_mode' : args.loss_mode,
         'models': (model_1, model_2, model_3, model_4),
+        'lr' : args.lr,
     }
 
     updater = Updater_dbp(**updater_args)
-    trainer = training.Trainer(updater, (args.max_iter, 'iteration'), out=args.out)
+    trainer = training.Trainer(updater, (args.iteration, 'iteration'), out=args.out)
 
     # trainer.extend(
     #     extensions.ExponentialShift('lr', 0.1, init=args.lr),
@@ -209,19 +221,31 @@ def main():
             label_names=vehicle_classes),
         trigger=(1000, 'iteration'))
 
+    bestshot_dir = os.path.join(args.out, "bestshot")
+    if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
+
+    trainer.extend(
+        ssd_evaluator(
+            args.target_valdata, model_1, updater, savedir=bestshot_dir, label_names=vehicle_classes),
+        trigger=(args.eval_tgt_itr, 'iteration'))
+
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
     trainer.extend(extensions.observe_lr(), trigger=log_interval)
     trainer.extend(extensions.PrintReport(
         ['epoch', 'iteration', 'lr',
-         'main/loss', 'main/loss/loc', 'main/loss/conf',
+         'main/loss_model2', 'main/loss_model2/loc', 'main/loss_model2/conf',
+         'main/loss_model3', 'main/loss_model3/loc', 'main/loss_model3/conf',
          'validation/main/map']),
         trigger=log_interval)
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
     trainer.extend(extensions.snapshot(), trigger=(1000, 'iteration'))
     trainer.extend(
-        extensions.snapshot_object(model, 'model_iter_{.updater.iteration}'),
+        extensions.snapshot_object(model_1, 'model1_iter_{.updater.iteration}'),
+        trigger=(args.iteration, 'iteration'))
+    trainer.extend(
+        extensions.snapshot_object(model_2, 'model2_iter_{.updater.iteration}'),
         trigger=(args.iteration, 'iteration'))
 
     if args.resume:
