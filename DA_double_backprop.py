@@ -91,7 +91,7 @@ class Updater_dbp(chainer.training.StandardUpdater):
         #
         # x = chainer.Variable(self.model_2.xp.stack(x))
         # mb_locs, mb_confs = self.model_2(x)
-        with chainer.cuda.get_device(mb_locs_l_g1):
+        with chainer.cuda.get_device(mb_locs_l_g1.data):
             mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
 
             loc_loss, conf_loss = multibox_loss(
