@@ -15,6 +15,7 @@ from SSD_for_vehicle_detection import ssd_predict_variable, resize_bbox_variable
 import chainer.functions as F
 import os
 from SSD_test import ssd_evaluator
+import cupy
 
 def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
     #Source and target models (roots of layer_s and layer_t) must have exactly the same structure.
@@ -22,7 +23,8 @@ def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
         for p in layer_s._params:
             _grad_var = layer_s.__dict__[p].grad_var
             grad_var = F.copy(_grad_var,dst)
-            layer_t.__dict__[p] += grad_var * lr
+            with cupy.cuda.Device(dst):
+                layer_t.__dict__[p] += grad_var * lr
     if '_children' in layer_s.__dict__:
         if len(layer_s._children) > 0:
             for c in layer_s._children:
@@ -89,11 +91,12 @@ class Updater_dbp(chainer.training.StandardUpdater):
         #
         # x = chainer.Variable(self.model_2.xp.stack(x))
         # mb_locs, mb_confs = self.model_2(x)
-        mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
+        with chainer.cuda.get_device(mb_locs_l_g1):
+            mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
 
-        loc_loss, conf_loss = multibox_loss(
-            mb_locs, mb_confs, mb_locs_l_g1, mb_labels_l_g1, self.k)
-        loss_model_2 = loc_loss * self.alpha + conf_loss
+            loc_loss, conf_loss = multibox_loss(
+                mb_locs, mb_confs, mb_locs_l_g1, mb_labels_l_g1, self.k)
+            loss_model_2 = loc_loss * self.alpha + conf_loss
 
         chainer.reporter.report(
             {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss},
@@ -109,10 +112,11 @@ class Updater_dbp(chainer.training.StandardUpdater):
         recursive_transfer_grad_var(self.model_2, self.model_3,dst=2, lr=self.lr)
 
         batch_labeled_array = convert.concat_examples(batch_labeled, 2)
-        mb_locs, mb_confs = self.model_3(batch_labeled_array[0])
-        loc_loss, conf_loss = multibox_loss(
-            mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
-        loss_model_3 = loc_loss * self.alpha + conf_loss  # cls loss
+        with chainer.cuda.get_device(batch_labeled_array[0]):
+            mb_locs, mb_confs = self.model_3(batch_labeled_array[0])
+            loc_loss, conf_loss = multibox_loss(
+                mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
+            loss_model_3 = loc_loss * self.alpha + conf_loss  # cls loss
 
         chainer.reporter.report(
             {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss},
