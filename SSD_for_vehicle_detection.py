@@ -133,7 +133,7 @@ def multibox_decode_variable(coder, mb_loc, mb_conf, nms_thresh=0.45, score_thre
             bbox_l = bbox_l[indices]
             score_l = score_l[indices]
         bbox.append(bbox_l)
-        label.append(Variable(xp.array((l,) * len(bbox_l))))
+        label.append(Variable(xp.array((l,) * len(bbox_l)).astype('f')))
         score.append(score_l)
     # bbox = xp.vstack(bbox).astype(np.float32)
     # label = xp.hstack(label).astype(np.int32)
@@ -206,7 +206,7 @@ def multibox_encode_variable(coder, bbox, label, iou_thresh=0.5):
                     coder._variance[1]
     mb_loc = F.hstack((mb_loc_former, mb_loc_latter))
     mb_label = label[index] + 1
-    mb_label = F.where(index < 0, Variable(xp.zeros(mb_label.shape).astype(mb_label.data.dtype)),mb_label)
+    mb_label = F.where(index < 0, Variable(xp.zeros(mb_label.shape).astype('f')),mb_label)
 
     return mb_loc, mb_label
 
