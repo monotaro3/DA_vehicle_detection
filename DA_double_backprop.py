@@ -99,8 +99,7 @@ class Updater_dbp(chainer.training.StandardUpdater):
             loss_model_2 = loc_loss * self.alpha + conf_loss
 
         chainer.reporter.report(
-            {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss},
-            self)
+            {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss})
 
         params = []
         param_generator = self.model_2.params()
@@ -119,8 +118,7 @@ class Updater_dbp(chainer.training.StandardUpdater):
             loss_model_3 = loc_loss * self.alpha + conf_loss  # cls loss
 
         chainer.reporter.report(
-            {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss},
-            self)
+            {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss})
 
         self.model_4.cleardrads()
         self.model_4.addgrads(self.model_2)
