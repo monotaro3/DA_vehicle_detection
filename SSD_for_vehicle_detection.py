@@ -23,7 +23,7 @@ defaultbox_size_512 = {
     0.3: (25.6, 30.72, 116.74, 202.75, 288.79, 374.78, 460.8, 546.82),
 }  # defaultbox size corresponding to the image resolution
 
-def ssd_predict_variable(ssd_model, imgs):
+def ssd_predict_variable(ssd_model, imgs, raw = False):
     x = list()
     sizes = list()
     for img in imgs:
@@ -34,6 +34,9 @@ def ssd_predict_variable(ssd_model, imgs):
 
     x = chainer.Variable(ssd_model.xp.stack(x))
     mb_locs, mb_confs = ssd_model(x)
+
+    if raw:
+        return mb_locs, mb_confs
 
     bboxes = list()
     labels = list()
