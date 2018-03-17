@@ -151,7 +151,7 @@ def main():
     parser.add_argument('--model_init_1', type=str, help='model1 to be loaded')
     parser.add_argument('--model_init_2', type=str, help='model2 to be loaded')
     parser.add_argument('--dataset_labeled', type=str, help='data with labels')
-    parser.add_argument('--dataset_unlabled', type=str, help='data without labels')
+    parser.add_argument('--dataset_unlabeled', type=str, help='data without labels')
     parser.add_argument('--target_valdata', type=str, help='dir of labeled target images for validation')
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
     parser.add_argument('--lrdecay_schedule', nargs = '*', type=int, default=[80000,100000])
