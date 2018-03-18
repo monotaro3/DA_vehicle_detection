@@ -459,7 +459,7 @@ def main():
 
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
-    trainer.extend(extensions.observe_lr(), trigger=log_interval)
+    trainer.extend(extensions.observe_lr('opt_model_1'), trigger=log_interval)
     trainer.extend(extensions.PrintReport(
         ['epoch', 'iteration', 'lr',
          'main/loss_model2', 'main/loss_model2/loc', 'main/loss_model2/conf',
