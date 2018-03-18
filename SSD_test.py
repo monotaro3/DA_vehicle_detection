@@ -352,7 +352,8 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
 
     def encode(self,ranking_list,data):
         n_rank = len(ranking_list)
-        data[:n_rank] = np.array(ranking_list)
+        if n_rank > 0:
+            data[:n_rank] = np.array(ranking_list)
 
     def decode(self, data):
         ranking_list = []
