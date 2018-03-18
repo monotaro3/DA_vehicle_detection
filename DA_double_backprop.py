@@ -24,6 +24,7 @@ def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
             _grad_var = layer_s.__dict__[p].grad_var
             if _grad_var is not None:
                 grad_var = F.copy(_grad_var,dst)
+                print(grad_var)
                 with cupy.cuda.Device(dst):
                     layer_t.__dict__[p] += grad_var * lr
     if '_children' in layer_s.__dict__:
@@ -166,10 +167,8 @@ def main():
 
     model_1 = initSSD(args.model, args.resolution, args.model_init_1)
     model_2 = initSSD(args.model, args.resolution, args.model_init_2)
-    model_3 = model_2.copy()
-    model_3.copyparams(model_2)
-    model_4 = model_2.copy()
-    model_4.copyparams(model_2)
+    model_3 = initSSD(args.model, args.resolution, args.model_init_2)
+    model_4 = initSSD(args.model, args.resolution, args.model_init_2)
     model_1.to_gpu(0)
     model_2.to_gpu(1)
     model_3.to_gpu(2)
