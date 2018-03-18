@@ -58,11 +58,9 @@ class Updater_dbp(chainer.training.StandardUpdater):
 
         #for parameter initialization
         if self.iteration == 0:
-            with chainer.using_config('train', False), \
-                 chainer.function.no_backprop_mode():
-                ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
-                ssd_predict_variable(self.model_3, batch_unlabeled, raw=True)
-                ssd_predict_variable(self.model_4, batch_unlabeled, raw=True)
+            self.model_2.predict(batch_unlabeled)
+            self.model_3.predict(batch_unlabeled)
+            self.model_4.predict(batch_unlabeled)
 
         self.model_1.cleargrads()
         self.model_2.cleargrads()
