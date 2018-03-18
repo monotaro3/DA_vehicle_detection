@@ -266,7 +266,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
     def evaluate(self):
         target = self._targets['main']
         result, stats = ssd_test(target, self.img_dir, procDir=True, resolution=self.resolution,
-                 modelsize=self.modelsize,evalonly=self.evalonly)
+                 modelsize=self.modelsize,evalonly=self.evalonly,resultdir=self.savedir)
 
         report = {'map': result['map']}
         for i in range(len(stats)):
