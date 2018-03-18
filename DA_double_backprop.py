@@ -56,16 +56,16 @@ class Updater_dbp(chainer.training.StandardUpdater):
         batch_unlabeled = self.get_iterator('target').next()
         batchsize = len(batch_labeled)
 
-        #for parameter initialization
-        if self.iteration == 0:
-            self.model_2.predict(batch_unlabeled)
-            self.model_3.predict(batch_unlabeled)
-            self.model_4.predict(batch_unlabeled)
+        # #for parameter initialization
+        # if self.iteration == 0:
+        #     self.model_2.predict(batch_unlabeled)
+        #     self.model_3.predict(batch_unlabeled)
+        #     self.model_4.predict(batch_unlabeled)
 
-        self.model_1.cleargrads()
-        self.model_2.cleargrads()
-        self.model_3.cleargrads()
-        self.model_4.cleargrads()
+        # self.model_1.cleargrads()
+        # self.model_2.cleargrads()
+        # self.model_3.cleargrads()
+        # self.model_4.cleargrads()
 
         # batch_unlabeled_array_g0 = convert.concat_examples(batch_unlabeled, 0)
         if self.loss_mode == 0:
@@ -91,6 +91,8 @@ class Updater_dbp(chainer.training.StandardUpdater):
             # mb_locs_l, mb_labels_l = self.model_1(x)
             mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
 
+        self.model_1.cleargrads()
+
         mb_locs_l_g1 = F.copy(mb_locs_l,dst=1)
         mb_labels_l_g1 = F.copy(mb_labels_l,dst=1)
 
@@ -114,6 +116,12 @@ class Updater_dbp(chainer.training.StandardUpdater):
         chainer.reporter.report(
             {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss})
 
+        self.model_2.cleargrads()
+
+        if self.iteration == 0:
+            self.model_3.copyparams(self.model_2)
+            self.model_4.copyparams(self.model_2)
+
         params = []
         param_generator = self.model_2.params()
         for param in param_generator:
@@ -134,9 +142,11 @@ class Updater_dbp(chainer.training.StandardUpdater):
         chainer.reporter.report(
             {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss})
 
+        self.model_4.cleargrads()
         self.model_4.addgrads(self.model_2)
         opt_model_4.update()
 
+        self.model_3.cleargrads()
         loss_model_3.backward()
         opt_model_1.update()
 
