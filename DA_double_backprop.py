@@ -24,7 +24,7 @@ def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
             _grad_var = layer_s.__dict__[p].grad_var
             if _grad_var is not None:
                 grad_var = F.copy(_grad_var,dst)
-                print(grad_var)
+                # print(grad_var)
                 with cupy.cuda.Device(dst):
                     layer_t.__dict__[p] += grad_var * lr
     if '_children' in layer_s.__dict__:
@@ -38,6 +38,124 @@ def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
 # def recursive_transfer_grad_var(model_source, model_target,dst,lr):
 #     #model_source and model_target must have exactly the same structure
 #     _recursive_transfer_grad_var(model_source, model_target,dst,lr)
+
+class Updater_dbp_sgpu(chainer.training.StandardUpdater):
+    def __init__(self, *args, **kwargs):
+        self.model_1, self.model_2, self.model_3, self.model_4 =  kwargs.pop('models')
+        self.loss_mode = kwargs.pop('loss_mode')
+        self.lr =  kwargs.pop('lr')
+        super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
+        self.alpha = 1
+        self.k = 3
+
+    def update_core(self):
+        opt_model_1 = self.get_optimizer('opt_model_1')
+        opt_model_4 = self.get_optimizer('opt_model_4')
+
+        batch_labeled = self.get_iterator('main').next()
+        batch_unlabeled = self.get_iterator('target').next()
+        batchsize = len(batch_labeled)
+
+        # #for parameter initialization
+        # if self.iteration == 0:
+        #     self.model_2.predict(batch_unlabeled)
+        #     self.model_3.predict(batch_unlabeled)
+        #     self.model_4.predict(batch_unlabeled)
+
+        # self.model_1.cleargrads()
+        # self.model_2.cleargrads()
+        # self.model_3.cleargrads()
+        # self.model_4.cleargrads()
+
+        # batch_unlabeled_array_g0 = convert.concat_examples(batch_unlabeled, 0)
+        if self.loss_mode == 0:
+            bboxes, labels, scores = ssd_predict_variable(self.model_1, batch_unlabeled)
+            mb_locs_l = []
+            mb_labels_l = []
+            for bbox, label in zip(bboxes, labels):
+                mb_loc, mb_label = multibox_encode_variable(self.model_1.coder, bbox, label)
+                mb_locs_l.append(mb_loc)
+                mb_labels_l.append(mb_label)
+            mb_locs_l = F.stack(mb_locs_l)
+            mb_labels_l = F.stack(mb_labels_l)
+        else:
+            # x = list()
+            # sizes = list()
+            # for img in batch_unlabeled:
+            #     _, H, W = img.shape
+            #     img = self.model_1._prepare(img)
+            #     x.append(self.model_1.xp.array(img))
+            #     sizes.append((H, W))
+            #
+            # x = chainer.Variable(self.model_1.xp.stack(x))
+            # mb_locs_l, mb_labels_l = self.model_1(x)
+            mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+
+        self.model_1.cleargrads()
+
+        # mb_locs_l_g1 = F.copy(mb_locs_l,dst=1)
+        # mb_labels_l_g1 = F.copy(mb_labels_l,dst=1)
+
+        # x = list()
+        # sizes = list()
+        # for img in batch_unlabeled:
+        #     _, H, W = img.shape
+        #     img = self.model_2._prepare(img)
+        #     x.append(self.model_2.xp.array(img))
+        #     sizes.append((H, W))
+        #
+        # x = chainer.Variable(self.model_2.xp.stack(x))
+        # mb_locs, mb_confs = self.model_2(x)
+        # with chainer.cuda.get_device(mb_locs_l_g1.data):
+        mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
+
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, mb_locs_l, mb_labels_l, self.k)
+        loss_model_2 = loc_loss * self.alpha + conf_loss
+
+        chainer.reporter.report(
+            {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss})
+
+        self.model_2.cleargrads()
+
+        if self.iteration == 0:
+            self.model_3.copyparams(self.model_2)
+            self.model_4.copyparams(self.model_2)
+
+        params = []
+        param_generator = self.model_2.params()
+        for param in param_generator:
+            params.append(param)
+
+        # with chainer.cuda.get_device(mb_locs_l_g1.data):
+        gradients = chainer.grad([loss_model_2], params,set_grad=True, enable_double_backprop=True)
+
+        recursive_transfer_grad_var(self.model_2, self.model_3,dst=0, lr=self.lr)
+
+        batch_labeled_array = convert.concat_examples(batch_labeled, 0)
+        # with chainer.cuda.get_device(batch_labeled_array[0]):
+        mb_locs, mb_confs = self.model_3(batch_labeled_array[0])
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
+        loss_model_3 = loc_loss * self.alpha + conf_loss  # cls loss
+
+        chainer.reporter.report(
+            {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss})
+
+        self.model_4.cleargrads()
+        self.model_4.addgrads(self.model_2)
+        opt_model_4.update()
+
+        self.model_3.cleargrads()
+        loss_model_3.backward()
+        opt_model_1.update()
+
+        loss_model_2.unchain_backward()
+        loss_model_3.unchain_backward()
+
+        self.model_2.copyparams(self.model_4)
+        self.model_3.copyparams(self.model_4)
+
 
 class Updater_dbp(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
@@ -178,6 +296,7 @@ def main():
     parser.add_argument('--lrdecay_schedule', nargs = '*', type=int, default=[80000,100000])
     parser.add_argument('--loss_mode', type=int, default=0, choices = [0,1])
     parser.add_argument('--eval_tgt_itr', type=int,default=100)
+    parser.add_argument("--single_gpu", action='store_true')
 
     args = parser.parse_args()
 
@@ -185,10 +304,16 @@ def main():
     model_2 = initSSD(args.model, args.resolution, args.model_init_2)
     model_3 = initSSD(args.model, args.resolution, args.model_init_2)
     model_4 = initSSD(args.model, args.resolution, args.model_init_2)
-    model_1.to_gpu(0)
-    model_2.to_gpu(1)
-    model_3.to_gpu(2)
-    model_4.to_gpu(3)
+    if args.single_gpu:
+        model_1.to_gpu(0)
+        model_2.to_gpu(0)
+        model_3.to_gpu(0)
+        model_4.to_gpu(0)
+    else:
+        model_1.to_gpu(0)
+        model_2.to_gpu(1)
+        model_3.to_gpu(2)
+        model_4.to_gpu(3)
 
     dataset_labeled = TransformDataset(COWC_dataset_processed(split="train", datadir=args.dataset_labeled),
                         Transform(model_1.coder, model_1.insize, model_1.mean))
@@ -227,7 +352,10 @@ def main():
         'lr' : args.lr,
     }
 
-    updater = Updater_dbp(**updater_args)
+    if args.single_gpu:
+        updater = Updater_dbp_sgpu(**updater_args)
+    else:
+        updater = Updater_dbp(**updater_args)
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out=args.out)
 
     # trainer.extend(
