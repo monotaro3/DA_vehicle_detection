@@ -56,6 +56,14 @@ class Updater_dbp(chainer.training.StandardUpdater):
         batch_unlabeled = self.get_iterator('target').next()
         batchsize = len(batch_labeled)
 
+        #for parameter initialization
+        if self.iteration == 0:
+            with chainer.using_config('train', False), \
+                 chainer.function.no_backprop_mode():
+                ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
+                ssd_predict_variable(self.model_3, batch_unlabeled, raw=True)
+                ssd_predict_variable(self.model_4, batch_unlabeled, raw=True)
+
         self.model_1.cleargrads()
         self.model_2.cleargrads()
         self.model_3.cleargrads()
