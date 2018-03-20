@@ -489,10 +489,10 @@ def main():
     if args.lrdecay_schedule:
         decay_attribute = 'lr' if args.optimizer =='Momentum_SGD' else 'alpha'
         trainer.extend(
-            extensions.ExponentialShift(decay_attribute, 0.1, init=args.lr1,optimizer='opt_model_1'),
+            extensions.ExponentialShift(decay_attribute, 0.1, init=args.lr1,optimizer=optimizer1),
             trigger=triggers.ManualScheduleTrigger(list(args.lrdecay_schedule), 'iteration'))
         trainer.extend(
-            extensions.ExponentialShift(decay_attribute, 0.1, init=args.lr2, optimizer='opt_model_4'),
+            extensions.ExponentialShift(decay_attribute, 0.1, init=args.lr2, optimizer=optimizer4),
             trigger=triggers.ManualScheduleTrigger(list(args.lrdecay_schedule), 'iteration'))
 
     trainer.extend(
