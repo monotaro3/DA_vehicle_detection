@@ -234,17 +234,30 @@ class Updater_trainSSD(chainer.training.StandardUpdater):
         batchsize = len(batch_labeled)
 
         if self.loss_mode == 0:
-            bboxes, labels, scores = ssd_predict_variable(self.model_1, batch_unlabeled)
+            # bboxes, labels, scores = ssd_predict_variable(self.model_1, batch_unlabeled)
+            # mb_locs_l = []
+            # mb_labels_l = []
+            # for bbox, label in zip(bboxes, labels):
+            #     mb_loc, mb_label = multibox_encode_variable(self.model_1.coder, bbox, label)
+            #     mb_locs_l.append(mb_loc)
+            #     mb_labels_l.append(mb_label)
+            # mb_locs_l = F.stack(mb_locs_l)
+            # mb_labels_l = F.stack(mb_labels_l)
+            bboxes, labels, scores = self.model_1.predict(batch_unlabeled)
             mb_locs_l = []
             mb_labels_l = []
+            xp = self.model_1.xp
             for bbox, label in zip(bboxes, labels):
-                mb_loc, mb_label = multibox_encode_variable(self.model_1.coder, bbox, label)
+                mb_loc, mb_label = self.model_1.coder.encode(xp.asarray(bbox),xp.asarray(label))
                 mb_locs_l.append(mb_loc)
                 mb_labels_l.append(mb_label)
-            mb_locs_l = F.stack(mb_locs_l)
-            mb_labels_l = F.stack(mb_labels_l)
+
+            mb_locs_l = xp.stack(mb_locs_l)
+            mb_labels_l = xp.stack(mb_labels_l)
         else:
-            mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+            with chainer.using_config('train', False), \
+                 chainer.function.no_backprop_mode():
+                mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
 
         self.model_1.cleargrads()
 
