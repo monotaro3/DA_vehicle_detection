@@ -221,7 +221,7 @@ class Updater_trainSSD(chainer.training.StandardUpdater):
         self.lr1 = kwargs.pop('lr1')
         self.lr2 = kwargs.pop('lr2')
         self.constraint = kwargs.pop('constraint')
-        super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
+        super(Updater_trainSSD, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
 
