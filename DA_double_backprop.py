@@ -159,7 +159,8 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
             mb_locs_l = F.stack(mb_locs_l)
             mb_labels_l = F.stack(mb_labels_l)
         else:
-            mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+            mb_locs_l, mb_confs_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+            mb_labels_l = F.argmax(mb_confs_l,axis=2)
 
         if not self.constraint:
             self.model_1.cleargrads()
@@ -257,7 +258,8 @@ class Updater_trainSSD(chainer.training.StandardUpdater):
         else:
             with chainer.using_config('train', False), \
                  chainer.function.no_backprop_mode():
-                mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+                mb_locs_l, mb_confs_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+                mb_labels_l = F.argmax(mb_confs_l, axis=2)
 
         self.model_1.cleargrads()
 
@@ -424,7 +426,7 @@ def main():
     model_2 = initSSD(args.model, args.resolution, args.model_init_2)
     model_3 = initSSD(args.model, args.resolution, args.model_init_2)
     model_4 = initSSD(args.model, args.resolution, args.model_init_2)
-    if args.single_gpu:
+    if args.single_gpu and args.gpu>=0:
         model_1.to_gpu(0)
         model_2.to_gpu(0)
         model_3.to_gpu(0)
