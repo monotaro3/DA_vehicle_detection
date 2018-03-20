@@ -116,15 +116,13 @@ def recursive_transfer_grad_var(layer_s, layer_t,dst,lr):
                 else:
                     recursive_transfer_grad_var(c,layer_t._children[layer_s._children.index(c)],dst,lr)
 
-# def recursive_transfer_grad_var(model_source, model_target,dst,lr):
-#     #model_source and model_target must have exactly the same structure
-#     _recursive_transfer_grad_var(model_source, model_target,dst,lr)
-
 class Updater_dbp_sgpu(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         self.model_1, self.model_2, self.model_3, self.model_4 =  kwargs.pop('models')
         self.loss_mode = kwargs.pop('loss_mode')
-        self.lr =  kwargs.pop('lr')
+        self.lr1 =  kwargs.pop('lr1')
+        self.lr2 = kwargs.pop('lr2')
+        self.constraint = kwargs.pop('constraint')
         super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
@@ -137,18 +135,19 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
         batch_unlabeled = self.get_iterator('target').next()
         batchsize = len(batch_labeled)
 
-        # #for parameter initialization
-        # if self.iteration == 0:
-        #     self.model_2.predict(batch_unlabeled)
-        #     self.model_3.predict(batch_unlabeled)
-        #     self.model_4.predict(batch_unlabeled)
+        if self.constraint:
+            batch_labeled_array = convert.concat_examples(batch_labeled, 0)
+            mb_locs, mb_confs = self.model_1(batch_labeled_array[0])
+            loc_loss, conf_loss = multibox_loss(
+                mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
+            loss_model_1 = loc_loss * self.alpha + conf_loss  # cls loss
 
-        # self.model_1.cleargrads()
-        # self.model_2.cleargrads()
-        # self.model_3.cleargrads()
-        # self.model_4.cleargrads()
+            chainer.reporter.report(
+                {'loss_model1': loss_model_1, 'loss_model1/loc': loc_loss, 'loss_model1/conf': conf_loss})
+            self.model_1.cleargrads()
+            loss_model_1.backward()
+            loss_model_1.unchain_backward()
 
-        # batch_unlabeled_array_g0 = convert.concat_examples(batch_unlabeled, 0)
         if self.loss_mode == 0:
             bboxes, labels, scores = ssd_predict_variable(self.model_1, batch_unlabeled)
             mb_locs_l = []
@@ -160,34 +159,11 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
             mb_locs_l = F.stack(mb_locs_l)
             mb_labels_l = F.stack(mb_labels_l)
         else:
-            # x = list()
-            # sizes = list()
-            # for img in batch_unlabeled:
-            #     _, H, W = img.shape
-            #     img = self.model_1._prepare(img)
-            #     x.append(self.model_1.xp.array(img))
-            #     sizes.append((H, W))
-            #
-            # x = chainer.Variable(self.model_1.xp.stack(x))
-            # mb_locs_l, mb_labels_l = self.model_1(x)
             mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
 
-        self.model_1.cleargrads()
+        if not self.constraint:
+            self.model_1.cleargrads()
 
-        # mb_locs_l_g1 = F.copy(mb_locs_l,dst=1)
-        # mb_labels_l_g1 = F.copy(mb_labels_l,dst=1)
-
-        # x = list()
-        # sizes = list()
-        # for img in batch_unlabeled:
-        #     _, H, W = img.shape
-        #     img = self.model_2._prepare(img)
-        #     x.append(self.model_2.xp.array(img))
-        #     sizes.append((H, W))
-        #
-        # x = chainer.Variable(self.model_2.xp.stack(x))
-        # mb_locs, mb_confs = self.model_2(x)
-        # with chainer.cuda.get_device(mb_locs_l_g1.data):
         mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
 
         loc_loss, conf_loss = multibox_loss(
@@ -211,7 +187,7 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
         # with chainer.cuda.get_device(mb_locs_l_g1.data):
         gradients = chainer.grad([loss_model_2], params,set_grad=True, enable_double_backprop=True)
 
-        recursive_transfer_grad_var(self.model_2, self.model_3,dst=0, lr=self.lr)
+        recursive_transfer_grad_var(self.model_2, self.model_3,dst=0, lr=self.lr2)
 
         batch_labeled_array = convert.concat_examples(batch_labeled, 0)
         # with chainer.cuda.get_device(batch_labeled_array[0]):
@@ -237,6 +213,53 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
         self.model_2.copyparams(self.model_4)
         self.model_3.copyparams(self.model_4)
 
+
+class Updater_trainSSD(chainer.training.StandardUpdater):
+    def __init__(self, *args, **kwargs):
+        self.model_1, self.model_2, self.model_3, self.model_4 = kwargs.pop('models')
+        self.loss_mode = kwargs.pop('loss_mode')
+        self.lr1 = kwargs.pop('lr1')
+        self.lr2 = kwargs.pop('lr2')
+        self.constraint = kwargs.pop('constraint')
+        super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
+        self.alpha = 1
+        self.k = 3
+
+    def update_core(self):
+        opt_model_2 = self.get_optimizer('opt_model_1')
+        # opt_model_4 = self.get_optimizer('opt_model_4')
+
+        batch_labeled = self.get_iterator('main').next()
+        batch_unlabeled = self.get_iterator('target').next()
+        batchsize = len(batch_labeled)
+
+        if self.loss_mode == 0:
+            bboxes, labels, scores = ssd_predict_variable(self.model_1, batch_unlabeled)
+            mb_locs_l = []
+            mb_labels_l = []
+            for bbox, label in zip(bboxes, labels):
+                mb_loc, mb_label = multibox_encode_variable(self.model_1.coder, bbox, label)
+                mb_locs_l.append(mb_loc)
+                mb_labels_l.append(mb_label)
+            mb_locs_l = F.stack(mb_locs_l)
+            mb_labels_l = F.stack(mb_labels_l)
+        else:
+            mb_locs_l, mb_labels_l = ssd_predict_variable(self.model_1, batch_unlabeled, raw=True)
+
+        self.model_1.cleargrads()
+
+        mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True)
+
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, mb_locs_l, mb_labels_l, self.k)
+        loss_model_2 = loc_loss * self.alpha + conf_loss
+
+        chainer.reporter.report(
+            {'loss_model2': loss_model_2, 'loss_model2/loc': loc_loss, 'loss_model2/conf': conf_loss})
+
+        self.model_2.cleargrads()
+        loss_model_2.backward()
+        opt_model_2.update()
 
 class Updater_dbp(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
@@ -362,7 +385,8 @@ def main():
     parser.add_argument(
         '--resolution', type=float, choices=(0.15,0.16,0.3), default=0.3)
     parser.add_argument('--batchsize', type=int, default=32)
-    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--lr1', type=float, default=1e-3)
+    parser.add_argument('--lr2', type=float, default=1e-3)
     parser.add_argument('--iteration', type=int, default=120000)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
@@ -378,6 +402,8 @@ def main():
     parser.add_argument('--loss_mode', type=int, default=0, choices = [0,1])
     parser.add_argument('--eval_tgt_itr', type=int,default=100)
     parser.add_argument("--single_gpu", action='store_true')
+    parser.add_argument("--constraint", action='store_true')
+    parser.add_argument("--ssd_pretrain", action='store_true')
 
     args = parser.parse_args()
 
@@ -408,10 +434,8 @@ def main():
         test, args.batchsize, repeat=False, shuffle=False)
 
     if args.optimizer == 'Momentum_SGD':
-        optimizer1 = chainer.optimizers.MomentumSGD(args.lr)
-        optimizer4 = chainer.optimizers.MomentumSGD(args.lr)
-        optimizer1.setup(model_1)
-        optimizer4.setup(model_4)
+        optimizer1 = chainer.optimizers.MomentumSGD(args.lr1)
+        optimizer4 = chainer.optimizers.MomentumSGD(args.lr2)
         for model in (model_1, model_4):
             for param in model.params():
                 if param.name == 'b':
@@ -419,10 +443,14 @@ def main():
                 else:
                     param.update_rule.add_hook(WeightDecay(args.weightdecay))
     else:
-        optimizer1 = chainer.optimizers.Adam(alpha=args.lr)
-        optimizer4 = chainer.optimizers.Adam(alpha=args.lr)
+        optimizer1 = chainer.optimizers.Adam(alpha=args.lr1)
+        optimizer4 = chainer.optimizers.Adam(alpha=args.lr2)
+
+    if args.ssd_pretrain:
+        optimizer1.setup(model_2)
+    else:
         optimizer1.setup(model_1)
-        optimizer4.setup(model_4)
+    optimizer4.setup(model_4)
 
     updater_args = {
         "iterator": {'main': train_iter1, 'target': train_iter2, },
@@ -430,7 +458,9 @@ def main():
         # "device": args.gpu
         'loss_mode' : args.loss_mode,
         'models': (model_1, model_2, model_3, model_4),
-        'lr' : args.lr,
+        'lr1': args.lr1,
+        'lr2': args.lr2,
+        'constraint': args.constraint,
     }
 
     if args.single_gpu:
@@ -460,11 +490,19 @@ def main():
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
     trainer.extend(extensions.observe_lr('opt_model_1'), trigger=log_interval)
-    trainer.extend(extensions.PrintReport(
-        ['epoch', 'iteration', 'lr',
+
+    log_key = ['epoch', 'iteration', 'lr',
          'main/loss_model2', 'main/loss_model2/loc', 'main/loss_model2/conf',
          'main/loss_model3', 'main/loss_model3/loc', 'main/loss_model3/conf',
-         'validation/main/map']),
+         'validation/main/map', 'validation/main/RR/car',
+         'validation/main/PR/car', 'validation/main/FAR/car', 'validation/main/F1/car'
+         ]
+
+    if args.constraint:
+        log_key += ['main/loss_model1', 'main/loss_model1/loc', 'main/loss_model1/conf',]
+
+    trainer.extend(extensions.PrintReport(
+        log_key),
         trigger=log_interval)
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
