@@ -483,7 +483,7 @@ def main():
     else:
         updater = Updater_dbp(**updater_args)
     if args.ssd_pretrain:
-        updater = Updater_trainSSD
+        updater = Updater_trainSSD(**updater_args)
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out=args.out)
 
     # trainer.extend(
