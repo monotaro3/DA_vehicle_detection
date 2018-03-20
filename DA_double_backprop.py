@@ -447,7 +447,7 @@ def main():
     optimizer4.setup(model_4)
 
     if args.optimizer == 'Momentum_SGD':
-        for model in (model_1, model_4):
+        for model in (optimizer1.target, optimizer4.target):
             for param in model.params():
                 if param.name == 'b':
                     param.update_rule.add_hook(GradientScaling(2))
