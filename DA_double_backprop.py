@@ -426,7 +426,7 @@ def main():
     model_2 = initSSD(args.model, args.resolution, args.model_init_2)
     model_3 = initSSD(args.model, args.resolution, args.model_init_2)
     model_4 = initSSD(args.model, args.resolution, args.model_init_2)
-    if args.single_gpu and args.gpu>=0:
+    if args.single_gpu:
         model_1.to_gpu(0)
         model_2.to_gpu(0)
         model_3.to_gpu(0)
