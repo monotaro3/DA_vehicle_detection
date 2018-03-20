@@ -436,12 +436,6 @@ def main():
     if args.optimizer == 'Momentum_SGD':
         optimizer1 = chainer.optimizers.MomentumSGD(args.lr1)
         optimizer4 = chainer.optimizers.MomentumSGD(args.lr2)
-        for model in (model_1, model_4):
-            for param in model.params():
-                if param.name == 'b':
-                    param.update_rule.add_hook(GradientScaling(2))
-                else:
-                    param.update_rule.add_hook(WeightDecay(args.weightdecay))
     else:
         optimizer1 = chainer.optimizers.Adam(alpha=args.lr1)
         optimizer4 = chainer.optimizers.Adam(alpha=args.lr2)
@@ -451,6 +445,14 @@ def main():
     else:
         optimizer1.setup(model_1)
     optimizer4.setup(model_4)
+
+    if args.optimizer == 'Momentum_SGD':
+        for model in (model_1, model_4):
+            for param in model.params():
+                if param.name == 'b':
+                    param.update_rule.add_hook(GradientScaling(2))
+                else:
+                    param.update_rule.add_hook(WeightDecay(args.weightdecay))
 
     updater_args = {
         "iterator": {'main': train_iter1, 'target': train_iter2, },
@@ -467,6 +469,8 @@ def main():
         updater = Updater_dbp_sgpu(**updater_args)
     else:
         updater = Updater_dbp(**updater_args)
+    if args.ssd_pretrain:
+        updater = Updater_trainSSD
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out=args.out)
 
     # trainer.extend(
