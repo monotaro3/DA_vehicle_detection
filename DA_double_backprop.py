@@ -490,15 +490,16 @@ def main():
     }
 
     if not args.ssd_pretrain:
-        updater_args.update({'lambda_constraint': args.lambda_constraint,
+        updater_args.update({'lambda_constraint': args.lambda_constraint,\
         'lambda_dbp': args.lambda_dbp,})
 
-    if args.single_gpu:
+    if args.ssd_pretrain:
+        updater = Updater_trainSSD(**updater_args)
+    elif args.single_gpu:
         updater = Updater_dbp_sgpu(**updater_args)
     else:
         updater = Updater_dbp(**updater_args)
-    if args.ssd_pretrain:
-        updater = Updater_trainSSD(**updater_args)
+
     trainer = training.Trainer(updater, (args.iteration, 'iteration'), out=args.out)
 
     if args.lrdecay_schedule:
