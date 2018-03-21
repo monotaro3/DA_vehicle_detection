@@ -123,6 +123,8 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
         self.lr1 =  kwargs.pop('lr1')
         self.lr2 = kwargs.pop('lr2')
         self.constraint = kwargs.pop('constraint')
+        self.lambda_constraint = kwargs.pop('lambda_constraint')
+        self.lambda_dbp = kwargs.pop('lambda_dbp')
         super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
@@ -140,7 +142,7 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
             mb_locs, mb_confs = self.model_1(batch_labeled_array[0])
             loc_loss, conf_loss = multibox_loss(
                 mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
-            loss_model_1 = loc_loss * self.alpha + conf_loss  # cls loss
+            loss_model_1 = (loc_loss * self.alpha + conf_loss)*self.lambda_constraint  # cls loss
 
             chainer.reporter.report(
                 {'loss_model1': loss_model_1, 'loss_model1/loc': loc_loss, 'loss_model1/conf': conf_loss})
@@ -195,7 +197,7 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
         mb_locs, mb_confs = self.model_3(batch_labeled_array[0])
         loc_loss, conf_loss = multibox_loss(
             mb_locs, mb_confs, batch_labeled_array[1], batch_labeled_array[2], self.k)
-        loss_model_3 = loc_loss * self.alpha + conf_loss  # cls loss
+        loss_model_3 = (loc_loss * self.alpha + conf_loss)*self.lambda_dbp  # cls loss
 
         chainer.reporter.report(
             {'loss_model3': loss_model_3, 'loss_model3/loc': loc_loss, 'loss_model3/conf': conf_loss})
@@ -402,6 +404,8 @@ def main():
     parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--lr1', type=float, default=1e-3)
     parser.add_argument('--lr2', type=float, default=1e-3)
+    parser.add_argument('--lambda_constraint', type=float, default=1)
+    parser.add_argument('--lambda_dbp', type=float, default=1)
     parser.add_argument('--iteration', type=int, default=120000)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
@@ -484,6 +488,10 @@ def main():
         'lr2': args.lr2,
         'constraint': args.constraint,
     }
+
+    if not args.ssd_pretrain:
+        updater_args.update({'lambda_constraint': args.lambda_constraint,
+        'lambda_dbp': args.lambda_dbp,})
 
     if args.single_gpu:
         updater = Updater_dbp_sgpu(**updater_args)
