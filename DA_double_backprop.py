@@ -461,6 +461,11 @@ def main():
         optimizer1.setup(model_1)
     optimizer4.setup(model_4)
 
+    if args.ssd_pretrain:
+        optimizer_args = {'opt_model_1': optimizer1}
+    else:
+        optimizer_args = {'opt_model_1':optimizer1, 'opt_model_4':optimizer4,}
+
     if args.optimizer == 'Momentum_SGD':
         for model in (optimizer1.target, optimizer4.target):
             for param in model.params():
@@ -471,7 +476,7 @@ def main():
 
     updater_args = {
         "iterator": {'main': train_iter1, 'target': train_iter2, },
-        'optimizer': {'opt_model_1':optimizer1, 'opt_model_4':optimizer4,},
+        'optimizer': optimizer_args,
         # "device": args.gpu
         'loss_mode' : args.loss_mode,
         'models': (model_1, model_2, model_3, model_4),
@@ -540,6 +545,9 @@ def main():
 
     if args.resume:
         serializers.load_npz(args.resume, trainer)
+
+    # serializers.save_npz(
+    #     os.path.join(args.out, "model_2_iter_7000"), trainer.updater._optimizers["opt_model_1"].target)
 
     trainer.run()
 
