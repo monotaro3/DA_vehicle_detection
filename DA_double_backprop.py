@@ -379,7 +379,7 @@ class Updater_dbp(chainer.training.StandardUpdater):
         with chainer.cuda.get_device(mb_locs_l_g1.data):
             gradients = chainer.grad([loss_model_2], params,set_grad=True, enable_double_backprop=True)
 
-        recursive_transfer_grad_var(self.model_2, self.model_3,dst=2, lr=self.lr)
+        recursive_transfer_grad_var(self.model_2, self.model_3,dst=2, lr=self.lr1)
 
         batch_labeled_array = convert.concat_examples(batch_labeled, 2)
         with chainer.cuda.get_device(batch_labeled_array[0]):
