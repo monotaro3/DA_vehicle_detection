@@ -280,10 +280,20 @@ class Updater_trainSSD(chainer.training.StandardUpdater):
 
 class Updater_dbp(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
-        self.model_1, self.model_2, self.model_3, self.model_4 =  kwargs.pop('models')
+        # self.model_1, self.model_2, self.model_3, self.model_4 =  kwargs.pop('models')
+        # self.loss_mode = kwargs.pop('loss_mode')
+        # self.lr =  kwargs.pop('lr1')
+        # super(Updater_dbp, self).__init__(*args, **kwargs)
+        # self.alpha = 1
+        # self.k = 3
+        self.model_1, self.model_2, self.model_3, self.model_4 = kwargs.pop('models')
         self.loss_mode = kwargs.pop('loss_mode')
-        self.lr =  kwargs.pop('lr1')
-        super(Updater_dbp, self).__init__(*args, **kwargs)
+        self.lr1 = kwargs.pop('lr1')
+        self.lr2 = kwargs.pop('lr2')
+        self.constraint = kwargs.pop('constraint')
+        self.lambda_constraint = kwargs.pop('lambda_constraint')
+        self.lambda_dbp = kwargs.pop('lambda_dbp')
+        super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
 
