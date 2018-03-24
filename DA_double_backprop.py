@@ -293,7 +293,7 @@ class Updater_dbp(chainer.training.StandardUpdater):
         self.constraint = kwargs.pop('constraint')
         self.lambda_constraint = kwargs.pop('lambda_constraint')
         self.lambda_dbp = kwargs.pop('lambda_dbp')
-        super(Updater_dbp_sgpu, self).__init__(*args, **kwargs)
+        super(Updater_dbp, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
 
