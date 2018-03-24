@@ -282,7 +282,7 @@ class Updater_dbp(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         self.model_1, self.model_2, self.model_3, self.model_4 =  kwargs.pop('models')
         self.loss_mode = kwargs.pop('loss_mode')
-        self.lr =  kwargs.pop('lr')
+        self.lr =  kwargs.pop('lr1')
         super(Updater_dbp, self).__init__(*args, **kwargs)
         self.alpha = 1
         self.k = 3
