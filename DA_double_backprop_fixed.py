@@ -180,8 +180,10 @@ class Updater_dbp_sgpu(chainer.training.StandardUpdater):
 
         mb_locs, mb_confs = ssd_predict_variable(self.model_2, batch_unlabeled, raw=True if self.loss_mode==1 else False)
 
+        b_raw = True if self.loss_mode == 1 else False
+
         loc_loss, conf_loss = multibox_loss(
-            mb_locs, mb_confs, mb_locs_l, mb_labels_l, self.k,raw=True)
+            mb_locs, mb_confs, mb_locs_l, mb_labels_l, self.k,raw=b_raw)
         loss_model_2 = loc_loss * self.alpha + conf_loss
 
         chainer.reporter.report(
