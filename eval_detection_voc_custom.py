@@ -171,6 +171,8 @@ def calc_detection_voc_prec_rec(
             order = pred_score_l.argsort()[::-1]
             pred_bbox_l = pred_bbox_l[order]
             pred_score_l = pred_score_l[order]
+            order_reverse = np.empty(order.shape,dtype=order.dtype)
+            order_reverse[order] = np.arange(len(order))
 
             gt_mask_l = gt_label == l
             gt_bbox_l = gt_bbox[gt_mask_l]
@@ -215,7 +217,7 @@ def calc_detection_voc_prec_rec(
                     match[l].append(0)
                     match_.append(0)
             match_ = np.hstack(match_).astype(np.int8)
-            match_ = match_[order]
+            match_ = match_[order_reverse]
             match_image[mask_index] = match_
         match_ordered.append(match_image)
 
