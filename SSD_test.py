@@ -160,7 +160,7 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             gt_bboxes.append(gt_bbox)
             # labels are without background, i.e. class_labels.index(class). So in this case 0 means cars
             gt_labels.append(np.stack([0]*len(gt_bbox)).astype(np.int32))
-            result_i, stats_i, matches_i = eval_detection_voc_custom([bbox],[label],[score],[gt_bbox],[np.stack([0]*len(gt_bbox)).astype(np.int32)],iou_thresh=0.4)
+            result_i, stats_i, matches_i, selec_i = eval_detection_voc_custom([bbox],[label],[score],[gt_bbox],[np.stack([0]*len(gt_bbox)).astype(np.int32)],iou_thresh=0.4)
             dirpath,fname = os.path.split(images[i])
             root, ext = os.path.splitext(os.path.join(resultdir,fname))
             result_stat.append([fname,"map",result_i["map"]])
@@ -171,13 +171,18 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             result_stat.append(['', "F1", stats_i[0]["F1"]])
             result_stat.append(['', "mean_ap_F1",  (result_i['map'] + (stats_i[0]['F1'] if stats_i[0]['F1'] != None else 0)) / 2])
             result_stat.append(['', "number of detected cars",len(bbox)])
+            result_stat.append(['', "number of TP", np.sum(matches_i[0]==1)])
+            result_stat.append(['', "number of FP", np.sum(matches_i[0] == 0)])
+            result_stat.append(['', "number of gt", len(gt_bbox)])
+            result_stat.append(['', "number of FN(undected gt)", np.sum(selec_i[0]==False)])
+            # result_stat.append(['', "number of FN(undected gt)(calculated)", len(gt_bbox)-np.sum(matches_i[0]==1)])
             result_stat.append([])
             # resulttxt_i = root + "_result.txt"
             # with open(resulttxt_i, mode="w") as f:
             #     f.write(str(result_i) + "\n" + str(stats_i))
 
     if not testonly:
-        result, stats, matches = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
+        result, stats, matches, selec_list = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
         mean_ap_f1 = (result['map'] + (stats[0]['F1'] if stats[0]['F1'] != None else 0)) / 2
 
     if not evalonly:
@@ -206,6 +211,10 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             else:
                 draw_rect(image_,bbox,matches[images.index(imagepath)])
             cv.imwrite(os.path.join(resultdir,result_name+ "_vis2.png"),image_)
+            gt_bbox = gt_bboxes[images.index(imagepath)]
+            undetected_gt = gt_bbox[selec_list[images.index(imagepath)]==False]
+            draw_rect(image_, undetected_gt, np.array((0,) * undetected_gt.shape[0], dtype=np.int8), mode="GT")
+            cv.imwrite(os.path.join(resultdir, result_name + "_vis3.png"), image_)
 
             #gt visualization
             if not testonly:
@@ -375,10 +384,10 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
 
 if __name__ == "__main__":
     imagepath = "c:/work/DA_images/NTT_scale0.3/2_6" #c:/work/DA_images/kashiwa_lalaport/0.3"#"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
-    modelpath = "model/DA/m_thesis/additional/x13_nmargin_nobias/model_iter_50000"
+    modelpath = "model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/SSD300_vd_7000.npz" #"model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz"
     # modelpath = "../chainer-cyclegan/experiment_data/models/NTT_fake_GT_L1_l10/model_iter_50000"
     # result_dir = "../chainer-cyclegan/experiment_data/results/NTT_fake_GT_L1_l10/"
-    result_dir = 'result/res0.3/m_thesis/additional/x13_nmargin_nobias'
+    result_dir = 'result/res0.3/re/rerun/adv_test'
     ssd_test(modelpath,imagepath,procDir=True,resultdir=result_dir,resolution=0.3,modelsize="ssd300")
 
 
