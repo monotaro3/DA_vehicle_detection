@@ -64,14 +64,14 @@ def eval_detection_voc_custom(
         * **map** (*float*): The average of Average Precisions over classes.
     """
 
-    prec, rec, stats, match_ordered = calc_detection_voc_prec_rec(
+    prec, rec, stats, match_ordered, selec_list = calc_detection_voc_prec_rec(
         pred_bboxes, pred_labels, pred_scores,
         gt_bboxes, gt_labels, gt_difficults,
         iou_thresh=iou_thresh)
 
     ap = calc_detection_voc_ap(prec, rec, use_07_metric=use_07_metric)
 
-    return {'ap': ap, 'map': np.nanmean(ap)}, stats, match_ordered
+    return {'ap': ap, 'map': np.nanmean(ap)}, stats, match_ordered, selec_list
 
 
 def calc_detection_voc_prec_rec(
@@ -144,6 +144,7 @@ def calc_detection_voc_prec_rec(
     score = defaultdict(list)
     match = defaultdict(list)
     match_ordered = list()
+    selec_list = list()
 
     #debug code
     num_example = 0
@@ -160,6 +161,7 @@ def calc_detection_voc_prec_rec(
             gt_difficult = np.zeros(gt_bbox.shape[0], dtype=bool)
 
         match_image = np.array((0,) * pred_bbox.shape[0],dtype=np.int8)
+        selec_all = np.zeros(gt_bbox.shape[0], dtype=bool)
 
         for l in np.unique(np.concatenate((pred_label, gt_label)).astype(int)):
             pred_mask_l = pred_label == l
@@ -173,6 +175,7 @@ def calc_detection_voc_prec_rec(
             pred_score_l = pred_score_l[order]
             order_reverse = np.empty(order.shape,dtype=order.dtype)
             order_reverse[order] = np.arange(len(order))
+
 
             gt_mask_l = gt_label == l
             gt_bbox_l = gt_bbox[gt_mask_l]
@@ -219,7 +222,11 @@ def calc_detection_voc_prec_rec(
             match_ = np.hstack(match_).astype(np.int8)
             match_ = match_[order_reverse]
             match_image[mask_index] = match_
+
+            selec_all[gt_mask_l] = selec
+
         match_ordered.append(match_image)
+        selec_list.append(selec_all)
 
     for iter_ in (
             pred_bboxes, pred_labels, pred_scores,
@@ -255,7 +262,7 @@ def calc_detection_voc_prec_rec(
                     "F1":2*prec[i][-1]*rec[i][-1]/(prec[i][-1]+rec[i][-1]) if (prec[i][-1]+rec[i][-1]) != 0 else None}
         else:
             stats[i] = {"PR": None, "RR": None, "FAR":None, "F1":None}
-    return prec, rec, stats, match_ordered
+    return prec, rec, stats, match_ordered, selec_list
 
 
 def calc_detection_voc_ap(prec, rec, use_07_metric=False):
