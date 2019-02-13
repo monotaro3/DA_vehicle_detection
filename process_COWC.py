@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     save_directory = ""
 
-    directories_list = "process_COWC_dirs_test.txt"
+    directories_list = "process_COWC_dirs.txt"
 
     dir_lists = [dir_.strip() for dir_ in open(directories_list)]
     for dir_ in dir_lists:
@@ -215,15 +215,15 @@ if __name__ == "__main__":
     print(process_directories)
 
     output_size = 300
-    windowsize = 25
+    windowsize = 50 # This window size will be scaled by the variable "scale" below
     adjust_margin = False
-    margin = 100
-    mask_margin_test = True
+    margin = 0
+    mask_margin_test = False
     use_edge = False
-    scale = None # set None when not using, 0.5 -> halve the resolution
+    scale = 0.5 # set None when not using, 0.5 -> halve the resolution
     rotate = True
-    maketestdata = False
-    mydata_mode = True
+    maketestdata = True #False to make only training data
+    mydata_mode = False  #True to process my own format, False to process COWC dataset
 
     train_img_number = 0
     test_img_number = 0
