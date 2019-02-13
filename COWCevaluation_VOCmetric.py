@@ -8,8 +8,8 @@ from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
 from SSD_for_vehicle_detection import defaultbox_size_300, defaultbox_size_512
 from eval_detection_voc_custom import eval_detection_voc_custom
 
-datadir = "E:/work/vehicle_detection_dataset/cowc_300px_0.3_daug_mask"
-ssd_path = "model/model_iter_60000"
+datadir = "e:/work/vehicle_detection_dataset/cowc_300px_0.3_daug_nmargin/"
+ssd_path = "model/DA/m_thesis/tonly_x13_nmargin/model_iter_20000"#"model/300_0.3_daug_nmargin/model_iter_40000"
 batchsize = 1
 modelsize = "ssd300"
 resolution = 0.3
@@ -51,7 +51,7 @@ elif len(gt_values) == 2:
     gt_difficults = None
 
 print("predicting & evaluating...")
-result, stats, matches = eval_detection_voc_custom(
+result, stats, matches, selec_list = eval_detection_voc_custom(
             pred_bboxes, pred_labels, pred_scores,
             gt_bboxes, gt_labels, gt_difficults,use_07_metric=True,iou_thresh=0.4)
 
