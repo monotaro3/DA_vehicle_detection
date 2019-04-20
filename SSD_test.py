@@ -388,6 +388,7 @@ if __name__ == "__main__":
     # modelpath = "../chainer-cyclegan/experiment_data/models/NTT_fake_GT_L1_l10/model_iter_50000"
     # result_dir = "../chainer-cyclegan/experiment_data/results/NTT_fake_GT_L1_l10/"
     result_dir = 'result/res0.3/re/rerun/adv_test'
+    #test 
     ssd_test(modelpath,imagepath,procDir=True,resultdir=result_dir,resolution=0.3,modelsize="ssd300")
 
 
