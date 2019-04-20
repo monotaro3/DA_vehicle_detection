@@ -8,7 +8,7 @@ import os
 from collections import defaultdict
 import numpy as np
 
-def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_select = None):
+def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_select = None, output_csv = False):
     with open(logfile) as f:
         # read json file
         ch_log = json.load(f)
@@ -113,20 +113,56 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
     #     print("top values:")
     #     print(d_array[index_sorted[0:10]])
 
-    if key_select:
-        for key in key_select:
-            plt.plot(data[key][0], data[key][1],
-                     label=key.replace("main/", "").replace("validation/", "").replace("validation_1/", ""))
-    else:
-        for key in data.keys():
-            plt.plot(data[key][0], data[key][1], label=key.replace("main/","").replace("validation/","").replace("validation_1/",""))
+    if not output_csv:
+        if key_select:
+            for key in key_select:
+                plt.plot(data[key][0], data[key][1],
+                         label=key.replace("main/", "").replace("validation/", "").replace("validation_1/", ""))
+        else:
+            for key in data.keys():
+                plt.plot(data[key][0], data[key][1], label=key.replace("main/","").replace("validation/","").replace("validation_1/",""))
 
-    #plt.ylim([0.,10])
-    plt.ylim([0.5, 0.9])
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.subplots_adjust(right=0.6)
-    plt.savefig(savepath)
-    # plt.show()
+    if output_csv:
+        root, ext = os.path.splitext(savepath)
+        save_csv = root + ".csv"
+        if key_select:
+            selected_keys = key_select
+        else:
+            selected_keys = data.keys()
+        max_length = 0
+        for key in selected_keys:
+            max_length = max(max_length,len(data[key][0]))
+        max_length +=2
+        write_data = [[] for x in range(max_length)]
+        for key in selected_keys:
+            write_data[0].extend([key,"",""])
+            write_data[1].extend(["iter","data",""])
+            for i in range(len(data[key][0])):
+                write_data[i+2].extend([data[key][0][i],data[key][1][i],""])
+
+            # temp_data = [key,"iter"]
+            # temp_data.extend(data[key][0])
+            # write_data.append(temp_data)
+            # temp_data = ["", "iter"]
+            # temp_data.extend(data[key][1])
+            # write_data.append(temp_data)
+            # # write_data.append([key, "iter"].extend(data[key][0]))
+            # # write_data.append(["", "data"].extend(data[key][1]))
+            # write_data.append([])
+        with open(save_csv,'w') as f:
+            import csv
+            writer = csv.writer(f, lineterminator="\n")
+            writer.writerows(write_data)
+
+    if not output_csv:
+        #plt.ylim([0.,2])
+        plt.ylim([0.5, 0.9])
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.subplots_adjust(right=0.6)
+        plt.savefig(savepath)
+        # plt.show()
 
 if __name__ == "__main__":
-    gengraph("model/DA/NTT_buf_sfixed_alt_100_nalign_DA2_dispt_20000/log",savedir='model/DA/NTT_buf_sfixed_alt_100_nalign_DA2_dispt_20000/',figname="train_eval.png",mode="DA_eval") #,key_select=('mean_ap_F1',))
+    #gengraph("model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/log",savedir='model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/',figname="train_loss.png",mode="DA_loss",output_csv=True )#,key_select=('mean_ap_F1',))
+    gengraph("model/DA/CORAL/ft_patch_w100000000_nmargin/log", savedir='model/DA/CORAL/ft_patch_w100000000_nmargin/',
+             figname="train_loss.png", mode="CORAL_loss",output_csv=True)#,key_select=('validation_1/main/map',))
