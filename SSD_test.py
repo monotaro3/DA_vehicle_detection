@@ -84,7 +84,7 @@ def mask_trim(maskimg,bbox, label,score):
     inner_mask = center_values == 255
     return bbox[inner_mask], label[inner_mask], score[inner_mask]
 
-def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=False, testonly = False, resultdir ="result", evalonly=False, mask=False):
+def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=False, testonly = False, resultdir ="result", evalonly=False, mask=False, gpu = 0):
     margin = 50
     # gpu = 0
 
@@ -127,8 +127,8 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
         serializers.load_npz(ssd_model, model)
     else:
         model = ssd_model
-    # if gpu >= 0: model.to_gpu()
-    if model.xp == np: model.to_gpu()
+    if gpu >= 0 and model.xp == np: model.to_gpu()
+    #if model.xp == np: model.to_gpu()
 
     #predict
     bboxes = []
@@ -253,9 +253,9 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
     priority = chainer.training.PRIORITY_WRITER
 
     def __init__(
-            self, img_dir, target,updater, savedir, n_ranking=5, resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None,save_bottom = 0.6):
+            self, img_dir, target,updater, savedir, n_ranking=5, resolution=0.3,modelsize="ssd300",evalonly=True, label_names=None,save_bottom = 0.6, gpu = 0):
         super(ssd_evaluator, self).__init__(
-            None, target)
+            {}, target)
         self.img_dir = img_dir
         self.resolution = resolution
         self.modelsize = modelsize
@@ -271,11 +271,12 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
         self.rank_mean_data = np.full((self.n_ranking, 4), -1., dtype=np.float32)
         self.updater = updater
         self.savedir = savedir
+        self.gpu = gpu
 
     def evaluate(self):
         target = self._targets['main']
         result, stats = ssd_test(target, self.img_dir, procDir=True, resolution=self.resolution,
-                 modelsize=self.modelsize,evalonly=self.evalonly,resultdir=self.savedir)
+                 modelsize=self.modelsize,evalonly=self.evalonly,resultdir=self.savedir, gpu=self.gpu)
 
         report = {'map': result['map']}
         for i in range(len(stats)):
