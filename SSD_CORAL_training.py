@@ -348,17 +348,17 @@ def main():
     parser.add_argument('--batchsize_tgt', type=int, default=32)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
-    parser.add_argument('--snapshot_interval', type=int)
+    parser.add_argument('--snapshot_interval', type=int)  #iteration
     parser.add_argument('--resume')
     parser.add_argument('--iteration', type = int)
-    parser.add_argument('--lrdecay_itr', type=int, nargs = 2, default = [40000,50000])
+    parser.add_argument('--lrdecay_itr', type=int, nargs = 2, default = [40000,50000]) #for MomentumSGD
     parser.add_argument('--model_init')
     parser.add_argument('--datadir')
     parser.add_argument('--DA_data')
     parser.add_argument('--DA_valdata')
     parser.add_argument('--eval_src_itr', type = int)
     parser.add_argument('--eval_tgt_itr', type = int)
-    parser.add_argument('--weightdecay', type=float,  default=0.0005)
+    parser.add_argument('--weightdecay', type=float,  default=0.0005) #for MomentumSGD
     parser.add_argument('--opt_mode',type=str,choices = ("Adam","MomentumSGD"))
     parser.add_argument('--CORAL_calculation', type=int, choices=(0,1,2)) # 0:pixelwise, 1:patchwise, 2:fmapwise
     parser.add_argument('--CORAL_weight', type=float)
@@ -513,7 +513,7 @@ def main():
     from SSD_test import ssd_evaluator
     trainer.extend(
         ssd_evaluator(
-            args.DA_valdata, model, updater, savedir=bestshot_dir, label_names=vehicle_classes),
+            args.DA_valdata, model, updater, savedir=bestshot_dir, label_names=vehicle_classes, gpu=gpu),
         trigger=(args.eval_tgt_itr, 'iteration'))
 
     log_interval = 10, 'iteration'
