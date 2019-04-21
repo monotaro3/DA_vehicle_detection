@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import argparse
 import cv2 as cv
 import numpy as np
 import os
@@ -190,6 +191,30 @@ def make_img_cutouts(image_path,image_mask_path,save_directory,cutout_size,size_
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--directories_list', type=str, default="process_COWC_dirs.txt")
+
+    #Images to be processed and save directory is specified by a text file of the following format:
+    #
+    # process,E:/work/COWCdataset/ground_truth_sets/Potsdam_ISPRS
+    # process,E:/work/COWCdataset/ground_truth_sets/Selwyn_LINZ
+    # process,E:/work/COWCdataset/ground_truth_sets/Toronto_ISPRS
+    # process,E:/work/COWCdataset/ground_truth_sets/Utah_AGRC
+    # save,E:/work/vehicle_detection_dataset/cowc_300px_0.3_daug_nmargin
+    #
+    parser.add_argument('--output_size', type=int, default=300)
+    parser.add_argument('--windowsize', type=int, default=50) # This window size will be scaled by the variable "scale" below
+    parser.add_argument('--adjust_margin', action='store_true')
+    parser.add_argument('--margin', type=int, default=0)
+    parser.add_argument('--mask_margin_test', action='store_true')
+    parser.add_argument('--use_edge', action='store_true')
+    parser.add_argument('--scale', type=float, default=0.5) # set None when not using, 0.5 -> halve the resolution
+    parser.add_argument('--norotate', action='store_true')
+    parser.add_argument('--trainonly', action='store_true') #False to make only training data
+    parser.add_argument('--mydata', action='store_true') #True to process my own format, False to process COWC dataset
+
+    args = parser.parse_args()
+
     process_directories = []
     # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Potsdam_ISPRS")
     # process_directories.append("E:/work/vehicle_detection_dataset/cowc/datasets/ground_truth_sets/Selwyn_LINZ")
@@ -198,7 +223,7 @@ if __name__ == "__main__":
 
     save_directory = ""
 
-    directories_list = "process_COWC_dirs.txt"
+    directories_list = args.directories_list #"process_COWC_dirs.txt"
 
     dir_lists = [dir_.strip() for dir_ in open(directories_list)]
     for dir_ in dir_lists:
@@ -214,16 +239,16 @@ if __name__ == "__main__":
     print("process dirs:")
     print(process_directories)
 
-    output_size = 300
-    windowsize = 50 # This window size will be scaled by the variable "scale" below
-    adjust_margin = False
-    margin = 0
-    mask_margin_test = False
-    use_edge = False
-    scale = 0.5 # set None when not using, 0.5 -> halve the resolution
-    rotate = True
-    maketestdata = True #False to make only training data
-    mydata_mode = False  #True to process my own format, False to process COWC dataset
+    output_size = args.output_size #300
+    windowsize = args.windowsize #50 # This window size will be scaled by the variable "scale" below
+    adjust_margin = args.adjust_margin #False
+    margin = args.margin #0
+    mask_margin_test = args.mask_margin_test #False
+    use_edge = args.use_edge #False
+    scale = args.scale #0.5 # set None when not using, 0.5 -> halve the resolution
+    rotate = not(args.norotate) #True
+    maketestdata = not(args.trainonly) #True #False to make only training data
+    mydata_mode = args.mydata #False  #True to process my own format, False to process COWC dataset
 
     train_img_number = 0
     test_img_number = 0
