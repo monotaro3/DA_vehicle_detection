@@ -14,8 +14,8 @@ from chainer.training import extensions
 from chainer.training import triggers
 from chainer.dataset import convert
 
-from chainercv.datasets import voc_detection_label_names
-from chainercv.datasets import VOCDetectionDataset
+# from chainercv.datasets import voc_detection_label_names
+# from chainercv.datasets import VOCDetectionDataset
 from chainercv.extensions import DetectionVOCEvaluator
 from chainercv.links.model.ssd import GradientScaling
 from chainercv.links.model.ssd import multibox_loss
@@ -23,7 +23,7 @@ from chainercv.links import SSD300
 from chainercv.links import SSD512
 from chainercv import transforms
 from chainercv.evaluations import eval_detection_voc
-from chainercv.utils import apply_prediction_to_iterator
+# from chainercv.utils import apply_prediction_to_iterator
 
 from chainercv.links.model.ssd import random_crop_with_bbox_constraints
 from chainercv.links.model.ssd import random_distort
@@ -276,65 +276,65 @@ class Transform(object):
 
         return img, mb_loc, mb_label
 
-class CORAL_evaluator(chainer.training.extensions.Evaluator):
-    trigger = 1, 'epoch'
-    default_name = 'validation'
-    priority = chainer.training.PRIORITY_WRITER
-    def __init__(self,src_iter,model, use_07_metric,label_names, target_eval_args,eval_doc_iter,eval_tgt_iter):
-        super(CORAL_evaluator, self).__init__(
-            None, model)
-        #self.voc_evaluator = DetectionVOCEvaluator(**voc_args)
-        from SSD_test import ssd_evaluator
-        self.tgt_evaluator = ssd_evaluator(**target_eval_args)
-        self.updater = target_eval_args["updater"]
-        self.eval_doc_iter = eval_doc_iter
-        self.eval_tgt_iter = eval_tgt_iter
-        self.src_iter = src_iter
-        #self.target = model
-        self.use_07_metric = use_07_metric
-        self.label_names = label_names
-
-    def evaluate(self):
-        target = self._targets['main']
-        observation = self.tgt_evaluator.evaluate()
-
-        #evaluate in source domain
-        if self.updater.iteration % self.eval_doc_iter == 0:
-            if hasattr(self.src_iter, 'reset'):
-                self.src_iter.reset()
-                it = self.src_iter
-            else:
-                it = copy.copy(self.src_iter)
-
-            imgs, pred_values, gt_values = apply_prediction_to_iterator(
-                target.predict, it)
-            # delete unused iterator explicitly
-            del imgs
-
-            pred_bboxes, pred_labels, pred_scores = pred_values
-
-            if len(gt_values) == 3:
-                gt_bboxes, gt_labels, gt_difficults = gt_values
-            elif len(gt_values) == 2:
-                gt_bboxes, gt_labels = gt_values
-                gt_difficults = None
-
-            result = eval_detection_voc(
-                pred_bboxes, pred_labels, pred_scores,
-                gt_bboxes, gt_labels, gt_difficults,
-                use_07_metric=self.use_07_metric)
-
-            report = {'s_map': result['s_map']}
-
-            if self.label_names is not None:
-                for l, label_name in enumerate(self.label_names):
-                    try:
-                        report['s_ap/{:s}'.format(label_name)] = result['ap'][l]
-                    except IndexError:
-                        report['s_ap/{:s}'.format(label_name)] = np.nan
-            with reporter.report_scope(observation):
-                reporter.report(report, self.target)
-        return observation
+# class CORAL_evaluator(chainer.training.extensions.Evaluator):
+#     trigger = 1, 'epoch'
+#     default_name = 'validation'
+#     priority = chainer.training.PRIORITY_WRITER
+#     def __init__(self,src_iter,model, use_07_metric,label_names, target_eval_args,eval_doc_iter,eval_tgt_iter):
+#         super(CORAL_evaluator, self).__init__(
+#             None, model)
+#         #self.voc_evaluator = DetectionVOCEvaluator(**voc_args)
+#         from SSD_test import ssd_evaluator
+#         self.tgt_evaluator = ssd_evaluator(**target_eval_args)
+#         self.updater = target_eval_args["updater"]
+#         self.eval_doc_iter = eval_doc_iter
+#         self.eval_tgt_iter = eval_tgt_iter
+#         self.src_iter = src_iter
+#         #self.target = model
+#         self.use_07_metric = use_07_metric
+#         self.label_names = label_names
+#
+#     def evaluate(self):
+#         target = self._targets['main']
+#         observation = self.tgt_evaluator.evaluate()
+#
+#         #evaluate in source domain
+#         if self.updater.iteration % self.eval_doc_iter == 0:
+#             if hasattr(self.src_iter, 'reset'):
+#                 self.src_iter.reset()
+#                 it = self.src_iter
+#             else:
+#                 it = copy.copy(self.src_iter)
+#
+#             imgs, pred_values, gt_values = apply_prediction_to_iterator(
+#                 target.predict, it)
+#             # delete unused iterator explicitly
+#             del imgs
+#
+#             pred_bboxes, pred_labels, pred_scores = pred_values
+#
+#             if len(gt_values) == 3:
+#                 gt_bboxes, gt_labels, gt_difficults = gt_values
+#             elif len(gt_values) == 2:
+#                 gt_bboxes, gt_labels = gt_values
+#                 gt_difficults = None
+#
+#             result = eval_detection_voc(
+#                 pred_bboxes, pred_labels, pred_scores,
+#                 gt_bboxes, gt_labels, gt_difficults,
+#                 use_07_metric=self.use_07_metric)
+#
+#             report = {'s_map': result['s_map']}
+#
+#             if self.label_names is not None:
+#                 for l, label_name in enumerate(self.label_names):
+#                     try:
+#                         report['s_ap/{:s}'.format(label_name)] = result['ap'][l]
+#                     except IndexError:
+#                         report['s_ap/{:s}'.format(label_name)] = np.nan
+#             with reporter.report_scope(observation):
+#                 reporter.report(report, self.target)
+#         return observation
 
 
 
