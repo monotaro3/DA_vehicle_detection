@@ -339,7 +339,8 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
             serializers.save_npz(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(current_iteration)),target)
         for iter in del_iter:
             if not iter in [i[0] for i in self.rank_map + self.rank_F1 + self.rank_mean]:
-                os.remove(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(iter)))
+                if os.path.isfile(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(iter))):
+                    os.remove(os.path.join(self.savedir,target.__class__.__name__ + "_{0}.npz".format(iter)))
 
         self.encode(self.rank_map,self.rank_map_data)
         self.encode(self.rank_F1, self.rank_F1_data)
@@ -372,6 +373,7 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
                 break
             else:
                 ranking_list.append([data[i][j] for j in range(data.shape[1])])
+                ranking_list[i][0] = int(ranking_list[i][0]) #iter number must be int
         return ranking_list
 
     def serialize(self, serializer):
