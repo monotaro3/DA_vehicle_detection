@@ -165,7 +165,7 @@ class Multibox_CORAL_loss(chainer.Chain):
             # loss = cls_loss + CORAL_loss * self.CORAL_weight
 
             chainer.reporter.report(
-                {'CORAL_loss_weighted': CORAL_loss * self.CORAL_weight},
+                {'CORAL_loss_weighted': CORAL_loss},
                 self)
 
             return CORAL_loss
