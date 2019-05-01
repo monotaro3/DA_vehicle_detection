@@ -14,6 +14,14 @@ import math
 from COWC_dataset_processed import vehicle_classes
 from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd, defaultbox_size_300, defaultbox_size_512
 
+def draw_rect(image, bbox, match,mode="TEST"):
+    for i in range(bbox.shape[0]):
+        if mode == "TEST":
+            color = (0, 0, 255) if match[i] == 1 else (255, 0, 0)
+        if mode == "GT":
+            color = (0, 255, 0)
+        cv.rectangle(image, (bbox[i][1], bbox[i][0]), (bbox[i][3], bbox[i][2]), color)
+
 def initSSD(modelname,resolution,path=None):
     if modelname == "ssd300":
         model = SSD300_vd(
@@ -248,7 +256,27 @@ def scaleConvert(srcdir,dstdir,scale):
                 bbox_text.write(",".join(map(str, b)) + "\n")
 
 
-
+def bbox_visualize(imgfile,gtfile):
+    #assume voc coordinate
+    img = cv.imread(imgfile)
+    # bboxes = []
+    # # labels =[]
+    # with open(gtfile, "r") as annotations:
+    #     line = annotations.readline()
+    #     while (line):
+    #         xmin, ymin, xmax, ymax = line.split(",")
+    #         xmin = int(xmin)
+    #         ymin = int(ymin)
+    #         xmax = int(xmax)
+    #         ymax = int(ymax)
+    #         bboxes.append([xmin, ymin, xmax, ymax])
+    #         # labels.append(vehicle_classes.index("car"))
+    #         line = annotations.readline()
+    # from SSD_test import draw_rect
+    bboxes = make_bboxeslist_chainercv(gtfile)
+    draw_rect(img, bboxes, np.array((0,) * bboxes.shape[0], dtype=np.int8), mode="GT")
+    name, ext = os.path.splitext(imgfile)
+    cv.imwrite(name + "_visualize"+ext, img)
 
 if __name__ == "__main__":
     #convertDepth('c:/work/spacenet\\raw\\RGB-PanSharpen_AOI_5_Khartoum_img1.tif',"c:/work/test4.tif")
@@ -256,5 +284,8 @@ if __name__ == "__main__":
     # serializers.load_npz("model/snapshot_iter_30000", trainer)
     # pass
     #convertImgs2fmaps("E:/work/vehicle_detection_dataset/cowc_300px_0.3/train","E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap","model/vgg_300_0.3_30000")
-    make_img_cutout("E:/work/DA_images/NTT_scale0.3/7_19_nolabels","E:/work/vehicle_detection_dataset/target_nolabels2_rotate",300,1,rotate=True)#0.16/0.3)
+    # make_img_cutout("E:/work/dataset/experiments/vehicle_detection_dataset/da_target_raw","E:/work/dataset/experiments/vehicle_detection_dataset/target_nolabels_full",300,0.16/0.3,rotate=False)#0.16/0.3)
     #scaleConvert("../DA_images/NTT2","../DA_images/NTT2_scale0.3",0.16/0.3)
+    bbox_visualize("E:/work/dataset/experiments/vehicle_detection_dataset/target_labels/train/0000000009.png","E:/work/dataset/experiments/vehicle_detection_dataset/target_labels/train/0000000009.txt")
+    # bbox_visualize("E:/work/dataset/experiments/vehicle_detection_dataset/cowc_300px_0.3_daug_nmargin/train/0000000017.png",
+    #                "E:/work/dataset/experiments/vehicle_detection_dataset/cowc_300px_0.3_daug_nmargin/train/0000000017.txt")
