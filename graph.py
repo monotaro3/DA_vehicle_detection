@@ -79,8 +79,12 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
 
     plt.figure(figsize=(10,6))
     #plt.figure()
-    plt.title("Training loss")
-    plt.ylabel("Loss")
+    if mode in ["DA_eval", "CORAL_eval"]:
+        plt.title("Peformance evaluation")
+        plt.ylabel("Indicators")
+    else:
+        plt.title("Training loss")
+        plt.ylabel("Loss")
     plt.xlabel("Iteration")
 
     # if mode == "SSD":
@@ -156,13 +160,13 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
 
     if not output_csv:
         #plt.ylim([0.,2])
-        plt.ylim([0.5, 0.9])
+        plt.ylim([0.0, 0.9])
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.subplots_adjust(right=0.6)
         plt.savefig(savepath)
         # plt.show()
 
 if __name__ == "__main__":
-    #gengraph("model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/log",savedir='model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/',figname="train_loss.png",mode="DA_loss",output_csv=True )#,key_select=('mean_ap_F1',))
-    gengraph("model/DA/CORAL/ft_patch_w100000000_nmargin/log", savedir='model/DA/CORAL/ft_patch_w100000000_nmargin/',
-             figname="train_loss.png", mode="CORAL_loss",output_csv=True)#,key_select=('validation_1/main/map',))
+    # gengraph("E:/work/DA_vehicle_detection/model/DA/m_thesis/4_CORAL_x5_nmargin_r1_1/log",savedir='E:/work/DA_vehicle_detection/model/DA/m_thesis/4_CORAL_x5_nmargin_r1_1/graph',figname="train_eval.png",mode="CORAL_eval",output_csv=False) #,key_select=('mean_ap_F1',))
+    gengraph("E:/work/experiments/trained_models/coral_nooverlap_full_coef10/log", savedir='E:/work/experiments/trained_models/coral_nooverlap_full_coef10/graphs',
+             figname="train_eval.png", mode="CORAL_eval",output_csv=False)#,key_select=('validation_1/main/map',))
