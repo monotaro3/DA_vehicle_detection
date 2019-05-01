@@ -17,15 +17,7 @@ import csv
 from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
 from COWC_dataset_processed import vehicle_classes
 from SSD_for_vehicle_detection import defaultbox_size_300, defaultbox_size_512
-from utils import make_bboxeslist_chainercv
-
-def draw_rect(image, bbox, match,mode="TEST"):
-    for i in range(bbox.shape[0]):
-        if mode == "TEST":
-            color = (0, 0, 255) if match[i] == 1 else (255, 0, 0)
-        if mode == "GT":
-            color = (0, 255, 0)
-        cv.rectangle(image, (bbox[i][1], bbox[i][0]), (bbox[i][3], bbox[i][2]), color)
+from utils import make_bboxeslist_chainercv, draw_rect
 
 def ssd_predict(model, image, margin,nms_thresh = 0.45):
     size = model.insize
@@ -386,11 +378,11 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
             self.rank_mean = self.decode(self.rank_mean_data)
 
 if __name__ == "__main__":
-    imagepath = "c:/work/DA_images/NTT_scale0.3/2_6" #c:/work/DA_images/kashiwa_lalaport/0.3"#"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
-    modelpath = "model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/SSD300_vd_7000.npz" #"model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz"
+    imagepath = "E:/work/dataset/raw/DA_images/NTT_scale0.3/2_6" #c:/work/DA_images/kashiwa_lalaport/0.3"#"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
+    modelpath = "E:/work\DA_vehicle_detection/model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz" #"model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/SSD300_vd_7000.npz" #"model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz"
     # modelpath = "../chainer-cyclegan/experiment_data/models/NTT_fake_GT_L1_l10/model_iter_50000"
     # result_dir = "../chainer-cyclegan/experiment_data/results/NTT_fake_GT_L1_l10/"
-    result_dir = 'result/res0.3/re/rerun/adv_test'
+    result_dir = 'E:/work/experiments/coral_test'
     ssd_test(modelpath,imagepath,procDir=True,resultdir=result_dir,resolution=0.3,modelsize="ssd300")
 
 
