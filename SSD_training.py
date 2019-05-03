@@ -172,6 +172,7 @@ def main():
     parser.add_argument('--s_t_ratio',type=int, nargs=2)
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
     parser.add_argument('--lrdecay_schedule', nargs = '*', type=int, default=[80000,100000])
+    parser.add_argument('--snapshot_interval', type=int)
     args = parser.parse_args()
 
     batchsize = args.batchsize
@@ -293,7 +294,7 @@ def main():
         trigger=log_interval)
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
-    trainer.extend(extensions.snapshot(), trigger=(1000, 'iteration'))
+    trainer.extend(extensions.snapshot(), trigger=(args.snapshot_interval, 'iteration'))
     trainer.extend(
         extensions.snapshot_object(model, 'model_iter_{.updater.iteration}'),
         trigger=(args.iteration, 'iteration'))
