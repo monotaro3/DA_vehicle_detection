@@ -364,6 +364,7 @@ def main():
     parser.add_argument('--CORAL_weight', type=float)
     parser.add_argument('--tgt_anno_data', type=str)
     parser.add_argument('--s_t_ratio', type=int, nargs=2)
+    parser.add_argument('--out_progress')
 
     args = parser.parse_args()
 
@@ -519,12 +520,19 @@ def main():
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
     trainer.extend(extensions.observe_lr(), trigger=log_interval)
-    trainer.extend(extensions.PrintReport(
-        ['epoch', 'iteration', 'lr',
+
+    printreport_args = {"entries": ['epoch', 'iteration', 'lr',
          'main/loss','main/cls_loss', 'main/loss/loc', 'main/loss/conf', 'main/CORAL_loss_weighted',
-         'validation/main/s_map','validation/main/map','validation/main/F1/car']),
+         'validation/main/s_map','validation/main/map','validation/main/F1/car']}
+    progress_args = {"update_interval": 10}
+    if args.out_progress:
+        fo = open(args.out_progress, 'w')
+        printreport_args["out"] = fo
+        progress_args["out"] = fo
+
+    trainer.extend(extensions.PrintReport(**printreport_args),
         trigger=log_interval)
-    trainer.extend(extensions.ProgressBar(update_interval=10))
+    trainer.extend(extensions.ProgressBar(**progress_args))
 
     trainer.extend(extensions.snapshot(), trigger=(args.snapshot_interval, 'iteration'))
     trainer.extend(
@@ -538,6 +546,9 @@ def main():
     # serializers.save_npz("model/ssd_300_0.16_55000",trainer.updater._optimizers["main"].target.model)
 
     trainer.run()
+
+    if args.out_progress:
+        fo.close()
 
     exectime = time.time() - exectime
     exectime_str = gen_dms_time_str(exectime)
