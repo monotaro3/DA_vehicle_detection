@@ -165,6 +165,7 @@ def main():
     parser.add_argument('--iteration', type=int, default=120000)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--out', default='result')
+    parser.add_argument('--out_progress')
     parser.add_argument('--resume')
     parser.add_argument('--resumemodel')
     parser.add_argument('--datadir')
@@ -287,12 +288,20 @@ def main():
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
     trainer.extend(extensions.observe_lr(), trigger=log_interval)
-    trainer.extend(extensions.PrintReport(
-        ['epoch', 'iteration', 'lr',
+
+    printreport_args = {"entries":['epoch', 'iteration', 'lr',
          'main/loss', 'main/loss/loc', 'main/loss/conf',
-         'validation/main/map']),
+         'validation/main/map']}
+    progress_args = {"update_interval": 10}
+    if args.out_progress:
+        fo = open(args.out_progress, 'w')
+        printreport_args["out"] =fo
+        progress_args["out"] = fo
+
+    trainer.extend(extensions.PrintReport(**printreport_args),
         trigger=log_interval)
-    trainer.extend(extensions.ProgressBar(update_interval=10))
+
+    trainer.extend(extensions.ProgressBar(**progress_args))
 
     trainer.extend(extensions.snapshot(), trigger=(args.snapshot_interval, 'iteration'))
     trainer.extend(
@@ -309,6 +318,9 @@ def main():
         serializers.load_npz(args.resumemodel, model)
 
     trainer.run()
+
+    if args.out_progress:
+        fo.close()
 
     exectime = time.time() - exectime
     exectime_str = gen_dms_time_str(exectime)
