@@ -5,6 +5,7 @@ import chainer.functions as F
 from chainer import Variable
 from chainer.dataset import convert
 from chainercv.links.model.ssd import multibox_loss
+import six
 
 
 class Updater1(chainer.training.StandardUpdater):
@@ -225,7 +226,7 @@ class DA_updater1_buf(chainer.training.StandardUpdater):
         # for i in range(len(src_fmap)):
         #     src_fmap[i] = src_fmap[i].data
 
-        func_bGPU = lambda x: chainer.cuda.to_gpu(x, device=self.device) if self.device >= 0 else lambda x: x
+        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.device)) if self.device >= 0 else lambda x: x
 
         size = 0
         if batchsize >= 2:
@@ -288,6 +289,20 @@ class DA_updater1_buf(chainer.training.StandardUpdater):
                 tgt_fmap[i] = chainer.cuda.to_cpu(tgt_fmap[i].data)
         self.buf.set_examples(src_fmap,tgt_fmap)
 
+    def serialize(self, serializer):
+        # """Serializes the current state of the updater object."""
+        # for name, iterator in six.iteritems(self._iterators):
+        #     iterator.serialize(serializer['iterator:' + name])
+        #
+        # for name, optimizer in six.iteritems(self._optimizers):
+        #     optimizer.serialize(serializer['optimizer:' + name])
+        #     optimizer.target.serialize(serializer['model:' + name])
+        #
+        # self.iteration = serializer('iteration', self.iteration)
+        super().serialize(serializer)
+
+        self.buf.serialize(serializer['buf'])
+
 class DA_updater1_buf_multibatch(chainer.training.StandardUpdater):  #hard coding for experiments
     def __init__(self, n_multi_batch = 16, *args, **kwargs):
         self.dis, self.cls = kwargs.pop('models')
@@ -323,7 +338,7 @@ class DA_updater1_buf_multibatch(chainer.training.StandardUpdater):  #hard codin
         # for i in range(len(src_fmap)):
         #     src_fmap[i] = src_fmap[i].data
 
-        func_bGPU = lambda x: chainer.cuda.to_gpu(x, device=self.device) if self.device >= 0 else lambda x: x
+        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.device)) if self.device >= 0 else lambda x: x
 
         size = 0
         if batchsize >= 2:
@@ -453,7 +468,7 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
         dis_optimizer = self.get_optimizer('opt_dis')
         cls_optimizer = self.get_optimizer('opt_cls')
         xp = self.dis.xp
-        func_bGPU = lambda x: chainer.cuda.to_gpu(x, device=self.device) if self.device >= 0 else lambda x: x
+        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.device)) if self.device >= 0 else lambda x: x
 
         loss_dis_src_sum = 0
         loss_dis_tgt_sum = 0
@@ -673,7 +688,7 @@ class DA_updater1_buf_2_t_anno(chainer.training.StandardUpdater):
         dis_optimizer = self.get_optimizer('opt_dis')
         cls_optimizer = self.get_optimizer('opt_cls')
         xp = self.dis.xp
-        func_bGPU = lambda x: chainer.cuda.to_gpu(x, device=self.device) if self.device >= 0 else lambda x: x
+        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.device)) if self.device >= 0 else lambda x: x
 
         loss_dis_src_sum = 0
         loss_dis_tgt_sum = 0
