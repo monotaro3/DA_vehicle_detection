@@ -597,6 +597,9 @@ class fmapBuffer(object):
         self.loss_tgt = None
         self.batchsize = batchsize
         self.gpu = gpu
+        self.fmap_num = None
+        # self.buffer_src_data = None
+        # self.buffer_tgt_data = None
 
     def get_examples(self, n_samples):
         if self.buffer_src == []:
@@ -690,6 +693,80 @@ class fmapBuffer(object):
                     self.buffer_src.append([src_samples[x][i] for x in range(n_fmap)])
                     self.buffer_tgt.append([tgt_samples[x][i] for x in range(n_fmap)])
 
+    def encode(self):
+        if len(self.buffer_src) > 0:
+            for i in range(len(self.buffer_src[0])):
+                src_fmaps = [self.buffer_src[x][i] for x in range(len(self.buffer_src))]
+                setattr(self,"buffer_src_data_"+str(i),np.array(src_fmaps))
+                tgt_fmaps = [self.buffer_tgt[x][i] for x in range(len(self.buffer_tgt))]
+                setattr(self,"buffer_tgt_data_" + str(i), np.array(tgt_fmaps))
+            self.fmap_num = len(self.buffer_src[0])
+        else:
+            self.fmap_num = 0
 
+    #     self.buffer_src_data = np.array(self.buffer_src)
+    #     self.buffer_tgt_data = np.array(self.buffer_tgt)
+    #
+    def decode(self):
+        if self.fmap_num > 0:
+            buffer_src_data = []
+            buffer_tgt_data = []
+            # i = 0
+            # src_temp = getattr(self,"buffer_src_data_"+str(i),None)
+            # tgt_temp = getattr(self, "buffer_tgt_data_" + str(i),None)
+            # while src_temp != None:
+            for i in range(self.fmap_num):
+                src_temp = getattr(self, "buffer_src_data_" + str(i), None)
+                tgt_temp = getattr(self, "buffer_tgt_data_" + str(i),None)
+                buffer_src_data.append(src_temp)
+                buffer_tgt_data.append(tgt_temp)
+            # i += 1
+            # src_temp = getattr(self, "buffer_src_data_" + str(i), None)
+            # tgt_temp = getattr(self, "buffer_tgt_data_" + str(i), None)
+        # if len(buffer_src_data) > 0:
+            self.buffer_src = [[buffer_src_data[x][y] for x in range(len(buffer_src_data))] for y in range(len(buffer_src_data[0]))]
+            self.buffer_tgt = [[buffer_tgt_data[x][y] for x in range(len(buffer_tgt_data))] for y in
+                               range(len(buffer_tgt_data[0]))]
+
+    def serialize(self, serializer):
+        if isinstance(serializer, chainer.serializer.Serializer):
+            self.encode()
+        self.fmap_num = serializer("fmap_num", self.fmap_num)
+        # i = 0
+        # src_temp = getattr(self, "buffer_src_data_" + str(i), None)
+        # tgt_temp = getattr(self, "buffer_tgt_data_" + str(i), None)
+        # while src_temp != None:
+        # if isinstance(serializer, chainer.serializer.Deserializer):
+        #     for i in range(self.fmap_num):
+        #         setattr(self, "buffer_src_data_" + str(i), None)
+        #         setattr(self, "buffer_tgt_data_" + str(i), None)
+        for i in range(self.fmap_num):
+            src_temp = getattr(self, "buffer_src_data_" + str(i), None)
+            tgt_temp = getattr(self, "buffer_tgt_data_" + str(i), None)
+            src_temp = serializer("buffer_src_data_" + str(i), src_temp)
+            tgt_temp = serializer("buffer_tgt_data_" + str(i), tgt_temp)
+            if isinstance(serializer, chainer.serializer.Deserializer):
+                setattr(self, "buffer_src_data_" + str(i), src_temp)
+                setattr(self, "buffer_tgt_data_" + str(i), tgt_temp)
+            # buffer_src_data.append(src_temp)
+            # buffer_tgt_data.append(tgt_temp)
+            # i += 1
+            # src_temp = getattr(self, "buffer_src_data_" + str(i), None)
+            # tgt_temp = getattr(self, "buffer_tgt_data_" + str(i), None)
+        if isinstance(serializer, chainer.serializer.Deserializer):
+            self.decode()
+        # self.rank_map_data = serializer('rank_map', self.rank_map_data)
+        # self.rank_F1_data = serializer('rank_F1', self.rank_F1_data)
+        # self.rank_mean_data = serializer('rank_mean', self.rank_mean_data)
+        # if isinstance(serializer, chainer.serializer.Deserializer):
+        #     self.rank_map = self.decode(self.rank_map_data)
+        #     self.rank_F1 = self.decode(self.rank_F1_data)
+        #     self.rank_mean = self.decode(self.rank_mean_data)
+    #     buf = []
+    #     for i in range(len(data)):
+    #         buf.append(data[i])
+    #         ranking_list.append([data[i][j] for j in range(data.shape[1])])
+    #         ranking_list[i][0] = int(ranking_list[i][0]) #iter number must be int
+    #     return ranking_list
 
 
