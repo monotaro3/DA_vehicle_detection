@@ -68,6 +68,7 @@ def main():
     parser.add_argument('--bufmode', type=int, help='mode of buffer(0:align src and tgt, 1:not align, 2:sort by loss value)')
     parser.add_argument('--tgt_anno_data', type=str, help='target anotation dataset directory')
     parser.add_argument('--s_t_ratio',type=int, nargs=2)
+    parser.add_argument('--out_progress')
 
     args = parser.parse_args()
 
@@ -239,8 +240,20 @@ def main():
     trainer.extend(extensions.snapshot(), trigger=(args.snapshot_interval, 'iteration'))
     trainer.extend(extensions.LogReport(keys=report_keys,
                                         trigger=(args.display_interval, 'iteration')))
-    trainer.extend(extensions.PrintReport(report_keys), trigger=(args.display_interval, 'iteration'))
-    trainer.extend(extensions.ProgressBar(update_interval=10))
+
+    printreport_args = {"entries": report_keys}
+    progress_args = {"update_interval": 10}
+    if args.out_progress:
+        fo = open(args.out_progress, 'w')
+        printreport_args["out"] = fo
+        progress_args["out"] = fo
+
+    trainer.extend(extensions.PrintReport(**printreport_args),
+                   trigger=(args.display_interval, 'iteration'))
+    trainer.extend(extensions.ProgressBar(**progress_args))
+
+    # trainer.extend(extensions.PrintReport(report_keys), trigger=(args.display_interval, 'iteration'))
+    # trainer.extend(extensions.ProgressBar(update_interval=10))
 
     bestshot_dir = os.path.join(args.out,"bestshot")
     if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
@@ -256,6 +269,8 @@ def main():
     # Run the training
     trainer.run()
 
+    if args.out_progress:
+        fo.close()
 
 if __name__ == '__main__':
     main()
