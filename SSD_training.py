@@ -174,6 +174,8 @@ def main():
     parser.add_argument('--weightdecay', type=float,  default=0.0005)
     parser.add_argument('--lrdecay_schedule', nargs = '*', type=int, default=[80000,100000])
     parser.add_argument('--snapshot_interval', type=int)
+    parser.add_argument('--target_val_data', type=str)
+    parser.add_argument('--target_val_interval', type=int)
     args = parser.parse_args()
 
     batchsize = args.batchsize
@@ -284,6 +286,16 @@ def main():
             test_iter, model, use_07_metric=True,
             label_names=vehicle_classes),
         trigger=(10000, 'iteration'))
+
+    if args.target_val_data:
+        from SSD_test import ssd_evaluator
+        import os
+        bestshot_dir = os.path.join(args.out, "bestshot")
+        if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
+        trainer.extend(
+            ssd_evaluator(
+                args.target_val_data, model, updater, savedir=bestshot_dir, label_names=vehicle_classes, gpu=gpu),
+            trigger=(args.target_val_interval, 'iteration'))
 
     log_interval = 10, 'iteration'
     trainer.extend(extensions.LogReport(trigger=log_interval))
