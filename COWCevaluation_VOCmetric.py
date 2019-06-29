@@ -1,15 +1,15 @@
 import chainer
 from chainer import serializers
 import copy
-from chainercv.utils import apply_prediction_to_iterator
+from chainercv.utils import apply_to_iterator
 
 from COWC_dataset_processed import COWC_dataset_processed, vehicle_classes
 from SSD_for_vehicle_detection import SSD300_vd, SSD512_vd
 from SSD_for_vehicle_detection import defaultbox_size_300, defaultbox_size_512
 from eval_detection_voc_custom import eval_detection_voc_custom
 
-datadir = "e:/work/vehicle_detection_dataset/cowc_300px_0.3_daug_nmargin/"
-ssd_path = "model/DA/m_thesis/tonly_x13_nmargin/model_iter_20000"#"model/300_0.3_daug_nmargin/model_iter_40000"
+datadir = "e:/work/dataset/experiments/vehicle_detection_dataset/cowc_300px_0.3_daug_nmargin/"
+ssd_path = "E:/work/DA_vehicle_detection/model/300_0.3_daug_nmargin/model_iter_40000"# "model/DA/m_thesis/tonly_x13_nmargin/model_iter_20000"
 batchsize = 1
 modelsize = "ssd300"
 resolution = 0.3
@@ -37,7 +37,7 @@ if hasattr(test_iter, 'reset'):
 else:
     it = copy.copy(test_iter)
 
-imgs, pred_values, gt_values = apply_prediction_to_iterator(
+imgs, pred_values, gt_values = apply_to_iterator(
             model.predict, it)
 # delete unused iterator explicitly
 del imgs
