@@ -31,6 +31,8 @@ def ssd_predict(model, image, margin,nms_thresh = 0.45):
     label = list()
     score = list()
 
+    #to be fixed: crashes when image is smaller than cutout size
+
     for h in range(H_slot):
         offset_H = stride * h if h < H_slot-1 else H - size
         for w in range(W_slot):
@@ -76,7 +78,7 @@ def mask_trim(maskimg,bbox, label,score):
     inner_mask = center_values == 255
     return bbox[inner_mask], label[inner_mask], score[inner_mask]
 
-def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=False, testonly = False, resultdir ="result", evalonly=False, mask=False, gpu = 0):
+def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=False, testonly = False, resultdir ="result", evalonly=False, mask=False, gpu = 0, iou_threshold = 0.4):
     margin = 50
     # gpu = 0
 
@@ -152,7 +154,7 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             gt_bboxes.append(gt_bbox)
             # labels are without background, i.e. class_labels.index(class). So in this case 0 means cars
             gt_labels.append(np.stack([0]*len(gt_bbox)).astype(np.int32))
-            result_i, stats_i, matches_i, selec_i = eval_detection_voc_custom([bbox],[label],[score],[gt_bbox],[np.stack([0]*len(gt_bbox)).astype(np.int32)],iou_thresh=0.4)
+            result_i, stats_i, matches_i, selec_i = eval_detection_voc_custom([bbox],[label],[score],[gt_bbox],[np.stack([0]*len(gt_bbox)).astype(np.int32)],iou_thresh=iou_threshold)
             dirpath,fname = os.path.split(images[i])
             root, ext = os.path.splitext(os.path.join(resultdir,fname))
             result_stat.append([fname,"map",result_i["map"]])
@@ -174,7 +176,7 @@ def ssd_test(ssd_model, imagepath, modelsize="ssd300", resolution=0.16, procDir=
             #     f.write(str(result_i) + "\n" + str(stats_i))
 
     if not testonly:
-        result, stats, matches, selec_list = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=0.4)
+        result, stats, matches, selec_list = eval_detection_voc_custom(bboxes,labels,scores,gt_bboxes,gt_labels,iou_thresh=iou_threshold)
         mean_ap_f1 = (result['map'] + (stats[0]['F1'] if stats[0]['F1'] != None else 0)) / 2
 
     if not evalonly:
@@ -378,11 +380,11 @@ class ssd_evaluator(chainer.training.extensions.Evaluator):
             self.rank_mean = self.decode(self.rank_mean_data)
 
 if __name__ == "__main__":
-    imagepath = "E:/work/dataset/raw/DA_images/NTT_scale0.3/2_6" #c:/work/DA_images/kashiwa_lalaport/0.3"#"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
-    modelpath = "E:/work\DA_vehicle_detection/model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz" #"model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/SSD300_vd_7000.npz" #"model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz"
+    imagepath = "E:/work/dataset/raw/DA_images/NTT_scale0.3/1" #2_6" #c:/work/DA_images/kashiwa_lalaport/0.3"#"#"E:/work/vehicle_detection_dataset/cowc_processed/train/0000000001.png"
+    modelpath = "E:/work/DA_vehicle_detection/model/300_0.3_daug_nmargin/model_iter_40000" #"E:/work/experiments/trained_models/ssd_basemodel/model_iter_40000" #"model/DA/NTT_buf_alt_100_nalign_DA4_nmargin/SSD300_vd_7000.npz" #"model/DA/CORAL/ft_patch_w100000000_nmargin/SSD300_vd_33750.npz"
     # modelpath = "../chainer-cyclegan/experiment_data/models/NTT_fake_GT_L1_l10/model_iter_50000"
     # result_dir = "../chainer-cyclegan/experiment_data/results/NTT_fake_GT_L1_l10/"
-    result_dir = 'E:/work/experiments/coral_test'
-    ssd_test(modelpath,imagepath,procDir=True,resultdir=result_dir,resolution=0.3,modelsize="ssd300")
+    result_dir = 'E:/work/experiments/results/val_iou_test/0.55'
+    ssd_test(modelpath,imagepath,procDir=True,resultdir=result_dir,resolution=0.3,modelsize="ssd300", iou_threshold=0.55)
 
 
