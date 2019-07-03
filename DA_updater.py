@@ -813,6 +813,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
         tempmodel.cleargrads()
         # self.cls.to_cpu()
         tempmodel.to_cpu()
+        self.cls.to_gpu()
 
         for i in range(self.current_tgt_step):
             #save fmap to buffer
@@ -927,6 +928,8 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
 
             coral_loss.unchain_backward()
             del coral_loss
+
+
 
         loss_t_enc_sum /= self.current_tgt_step
         loss_cls_sum /= self.current_tgt_step
