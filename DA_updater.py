@@ -6,6 +6,7 @@ from chainer import Variable
 from chainer.dataset import convert
 from chainercv.links.model.ssd import multibox_loss
 import six
+from chainer.backends import cuda
 
 
 class Updater1(chainer.training.StandardUpdater):
@@ -692,7 +693,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
         dis_optimizer = self.get_optimizer('opt_dis')
         cls_optimizer = self.get_optimizer('opt_cls')
         xp = self.dis.xp
-        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.device)) if self.device >= 0 else lambda x: x
+        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.device)) if isinstance(self.device, cuda.GpuDevice) else lambda x: x
 
         loss_dis_src_sum = 0
         loss_dis_tgt_sum = 0
