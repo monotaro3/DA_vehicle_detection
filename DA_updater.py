@@ -662,6 +662,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
         # self.coral_loss_func = kwargs.pop('coral_loss_func')
         self.coral_batchsize = kwargs.pop('coral_batchsize')
         self.CORAL_weight = kwargs.pop('coral_weight')
+        self.gpu_num = kwargs["device"]
         super(DA_updater1_buf_2_coral, self).__init__(*args, **kwargs)
         self.t_enc = self.cls.extractor
         self.alpha = 1
@@ -754,12 +755,12 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
                     src_fmap_dis = []
                     for i in range(len(src_fmap)):
                         #src_fmap[i] = Variable(xp.vstack((src_fmap[i][0:batchsize - size], func_bGPU(e_buf_src[i]))))
-                        src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.device), Variable(func_bGPU(e_buf_src[i])))))
+                        src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.gpu_num), Variable(func_bGPU(e_buf_src[i])))))
                         src_fmap_dis[i].unchain_backward()
                 else:
                     src_fmap_dis = []
                     for i in range(len(src_fmap)):
-                        src_fmap_dis.append(F.copy(src_fmap[i],self.device))
+                        src_fmap_dis.append(F.copy(src_fmap[i],self.gpu_num))
                         src_fmap_dis[i].unchain_backward()
 
             y_source = self.dis(src_fmap_dis)
@@ -774,7 +775,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
             tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
             tgt_fmap_dis = []
             for i in range(len(tgt_fmap)):
-                tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.device))
+                tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
                 tgt_fmap_dis[i].unchain_backward()
                 if size > 0:
                     tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i]))])
