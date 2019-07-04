@@ -809,11 +809,11 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
         loss_t_enc_sum = 0
         loss_cls_sum = 0
 
-        tempmodel = self.cls.copy()
-        tempmodel.cleargrads()
+        # tempmodel = self.cls.copy()
+        # tempmodel.cleargrads()
         # self.cls.to_cpu()
-        tempmodel.to_cpu()
-        self.cls.to_gpu()
+        # tempmodel.to_cpu()
+        # self.cls.to_gpu()
 
         for i in range(self.current_tgt_step):
             #save fmap to buffer
@@ -860,7 +860,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
 
             cls_loss.backward()
             # cls_optimizer.update()
-            tempmodel.addgrads(self.cls)
+            # tempmodel.addgrads(self.cls)
 
             # if i == 0 and self.bufmode == 0:
             #     src_fmap_tobuf = []
@@ -883,7 +883,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
             del cls_loss
 
             #coral loss
-            self.cls.cleargrads()
+            # self.cls.cleargrads()
             # arguments = {'s_imgs': batch_source_array[0], 'gt_mb_locs': batch_source_array[1],
             #              'gt_mb_labels': batch_source_array[2], 't_imgs': batch_target[:self.coral_batchsize]}
             # arguments['mode'] = 'CORAL'
@@ -921,7 +921,7 @@ class DA_updater1_buf_2_coral(chainer.training.StandardUpdater):
             loss_coral_sum += coral_loss.data
             coral_loss.backward()
 
-            self.cls.addgrads(tempmodel)
+            # self.cls.addgrads(tempmodel)
 
             #last update
             cls_optimizer.update()
