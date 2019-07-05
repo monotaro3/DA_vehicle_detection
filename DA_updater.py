@@ -660,13 +660,15 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, bufmode = 0,batchmode = 0, cls_train_mode = 0, init_disstep = 1, init_tgtstep = 1, tgt_steps_schedule = None, *args, **kwargs):
         self.dis, self.cls = kwargs.pop('models')
         self.buf = kwargs.pop('buffer')
+        self.coral_batchsize = kwargs.pop('coral_batchsize')
+        self.CORAL_weight = kwargs.pop('coral_weight')
         self.gpu_num = kwargs["device"]
         super(CORAL_Adv_updater, self).__init__(*args, **kwargs)
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
-        self.coral_batchsize = 16 #hardcoding to be removed
-        self.CORAL_weight = 1 #hardcoding to be removed
+        # self.coral_batchsize = 16 #hardcoding to be removed
+        # self.CORAL_weight = 1 #hardcoding to be removed
 
     def update_core(self):
 
