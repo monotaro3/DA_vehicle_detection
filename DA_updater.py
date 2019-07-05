@@ -834,6 +834,7 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
 
         cls_optimizer.update()
 
+        coral_loss = coral_loss.data
 
 
         # for s_map, t_map  in zip(src_fmap, tgt_fmap):
@@ -848,6 +849,7 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         chainer.reporter.report({'loss_cls': cls_loss})
         chainer.reporter.report({'loss_dis_src': loss_dis_src})
         chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
+        chainer.reporter.report({'loss_CORAL': coral_loss})
 
 
 class DA_updater1_buf_2_coral_(chainer.training.StandardUpdater):
