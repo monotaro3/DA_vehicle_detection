@@ -785,6 +785,9 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
              s_map.unchain_backward()
              t_map.unchain_backward()
 
+        del src_fmap
+        del tgt_fmap
+
         # debug code
         # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
 
