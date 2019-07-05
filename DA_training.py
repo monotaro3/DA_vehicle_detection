@@ -185,7 +185,7 @@ def main():
         Updater = DA_updater1_buf
         if args.updater:
             Updater = eval(args.updater)
-        if args.updater == "DA_updater1_buf_2":
+        if args.updater in ["DA_updater1_buf_2","CORAL_Adv_updater"]:
             updater_args["bufmode"] = args.Alt_update_param[0]
             updater_args["batchmode"] = args.Alt_update_param[1]
             updater_args["cls_train_mode"] = args.Alt_update_param[2]
