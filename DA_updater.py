@@ -739,9 +739,9 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         loss_dis.backward()
         dis_optimizer.update()
 
-        loss_dis_src_sum /= self.current_dis_step
-        loss_dis_tgt_sum /= self.current_dis_step
-        loss_dis_sum /= self.current_dis_step
+        # loss_dis_src_sum /= self.current_dis_step
+        # loss_dis_tgt_sum /= self.current_dis_step
+        # loss_dis_sum /= self.current_dis_step
 
         loss_t_enc_sum = 0
         loss_cls_sum = 0
@@ -784,8 +784,8 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         loss_t_enc_sum += loss_t_enc.data
         loss_cls_sum += cls_loss.data
 
-        loss_t_enc_sum /= self.current_tgt_step
-        loss_cls_sum /= self.current_tgt_step
+        # loss_t_enc_sum /= self.current_tgt_step
+        # loss_cls_sum /= self.current_tgt_step
 
         chainer.reporter.report({'loss_t_enc': loss_t_enc_sum})
         chainer.reporter.report({'loss_dis': loss_dis_sum})
