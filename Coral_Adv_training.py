@@ -204,7 +204,7 @@ def main():
                 updater_args["tgt_steps_schedule"] = tgt_step_schedule
             if args.fixed_source_dataset:
                 updater_args["iterator"]['src_fmaps'] = chainer.iterators.MultiprocessIterator(COWC_fmap_set(args.fixed_source_dataset), args.batchsize)
-            if args.updater == "DA_updater1_buf_2_coral":
+            if args.updater == "CORAL_Adv_updater":
                 updater_args["coral_batchsize"] = args.CORAL_batchsize
                 updater_args["coral_weight"] = args.CORAL_batchsize
 
