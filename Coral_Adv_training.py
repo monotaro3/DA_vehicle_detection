@@ -40,17 +40,17 @@ def main():
     parser.add_argument('--snapshot_interval', type=int, default=10000, help='Interval of snapshot')
     parser.add_argument('--evaluation_interval', type=int, default=10, help='Interval of evaluation')
     parser.add_argument('--display_interval', type=int, default=10, help='Interval of displaying log to console')
-    parser.add_argument('--n_dis', type=int, default=5, help='number of discriminator update per generator update')
+    # parser.add_argument('--n_dis', type=int, default=5, help='number of discriminator update per generator update')
     parser.add_argument('--gamma', type=float, default=0.5, help='hyperparameter gamma')
     parser.add_argument('--lam', type=float, default=10, help='gradient penalty')
     parser.add_argument('--adam_alpha', type=float, default=0.0002, help='alpha in Adam optimizer')
     parser.add_argument('--adam_beta1', type=float, default=0.0, help='beta1 in Adam optimizer')
     parser.add_argument('--adam_beta2', type=float, default=0.9, help='beta2 in Adam optimizer')
     parser.add_argument('--output_dim', type=int, default=256, help='output dimension of the discriminator (for cramer GAN)')
-    parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
+    # parser.add_argument('--initencoder',  help='trained encoder which initializes target encoder')
     parser.add_argument('--DA_model', type = str, help='DA discriminator class name to be used')
     parser.add_argument('--discriminator_init', type=str, help='discriminator file path for initialization')
-    parser.add_argument('--DA2_csize', type=int, help='channel size of conv2 of DA2_discriminator')
+    # parser.add_argument('--DA2_csize', type=int, help='channel size of conv2 of DA2_discriminator')
     parser.add_argument('--tgt_step_init', type=int, help='initial step number of tgt training in one iteration')
     parser.add_argument('--dis_step_init', type=int, help='initial step number of discriminator training in one iteration')
     parser.add_argument('--tgt_step_schedule', type=int, nargs = "*", help='schedule of step number of tgt training in one iteration')
@@ -76,7 +76,7 @@ def main():
 
     if args.mode in ["DA1","DA1_buf","DA1_buf_multibatch","DA_fix_dis"]:
         report_keys = ["loss_cls","loss_t_enc", "loss_dis",'loss_dis_src','loss_dis_tgt', 'validation/main/map','validation/main/RR/car',
-                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr_dis','lr_cls','loss_coral']
+                       'validation/main/PR/car','validation/main/FAR/car','validation/main/F1/car','lr_dis','lr_cls','loss_CORAL']
     else:
         report_keys = ["loss_t_enc", "loss_dis"]
 
@@ -187,7 +187,7 @@ def main():
         Updater = DA_updater1_buf
         if args.updater:
             Updater = eval(args.updater)
-        if args.updater in ["DA_updater1_buf_2","DA_updater1_buf_2_coral"]:
+        if args.updater in ["DA_updater1_buf_2","CORAL_Adv_updater"]:
             updater_args["bufmode"] = args.Alt_update_param[0]
             updater_args["batchmode"] = args.Alt_update_param[1]
             updater_args["cls_train_mode"] = args.Alt_update_param[2]
