@@ -665,18 +665,7 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
-        # self.bufmode = bufmode
-        # self.batchmode = batchmode
-        # self.cls_train_mode = cls_train_mode
-        # self.current_dis_step = init_disstep
-        # self.current_tgt_step = init_tgtstep
-        # self.tgt_steps_schedule = tgt_steps_schedule
-        # if self.tgt_steps_schedule != None:
-        #     if isinstance(tgt_steps_schedule, list):
-        #         self.tgt_steps_schedule.sort(key=lambda x:x[0])
-        #     else:
-        #         print("tgt step schedule must be specified by list object. The schedule is ignored.")
-        #         self.tgt_steps_schedule = None
+        self.coral_batchsize = 16 #hardcoding to be fixed
 
     def update_core(self):
 
@@ -686,9 +675,9 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         xp = self.dis.xp
         func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.gpu_num)) if self.gpu_num >= 0 else lambda x: x
 
-        loss_dis_src_sum = 0
-        loss_dis_tgt_sum = 0
-        loss_dis_sum = 0
+        # loss_dis_src_sum = 0
+        # loss_dis_tgt_sum = 0
+        # loss_dis_sum = 0
 
         batch_source = self.get_iterator('main').next()
         batch_source_array = convert.concat_examples(batch_source,self.device)
@@ -731,20 +720,16 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
         loss_dis = loss_dis_src + loss_dis_tgt
 
-        loss_dis_src_sum += loss_dis_src.data
-        loss_dis_tgt_sum += loss_dis_tgt.data
-        loss_dis_sum += loss_dis.data
+        # loss_dis_src_sum += loss_dis_src.data
+        # loss_dis_tgt_sum += loss_dis_tgt.data
+        # loss_dis_sum += loss_dis.data
 
         self.dis.cleargrads()
         loss_dis.backward()
         dis_optimizer.update()
 
-        # loss_dis_src_sum /= self.current_dis_step
-        # loss_dis_tgt_sum /= self.current_dis_step
-        # loss_dis_sum /= self.current_dis_step
-
-        loss_t_enc_sum = 0
-        loss_cls_sum = 0
+        # loss_t_enc_sum = 0
+        # loss_cls_sum = 0
 
         #save fmap to buffer
         src_fmap_tobuf = []
@@ -774,24 +759,62 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
 
 
         cls_loss.backward()
-        cls_optimizer.update()
+        # cls_optimizer.update()
 
+        # coral loss
+        # self.cls.cleargrads()
+        # arguments = {'s_imgs': batch_source_array[0], 'gt_mb_locs': batch_source_array[1],
+        #              'gt_mb_labels': batch_source_array[2], 't_imgs': batch_target[:self.coral_batchsize]}
+        # arguments['mode'] = 'CORAL'
+        #
+        # coral_loss = self.coral_loss_func(**arguments)
+        batchsize_tgt = self.coral_batchsize
+        # src_fmap = self.extractor(s_imgs)
+        # tgt_fmap = self.extractor(t_imgs)
+        src_examples = src_fmap[0][:batchsize_tgt]
+        tgt_examples = tgt_fmap[0][:batchsize_tgt]
+        n_data, c, w, h = src_examples.shape
+
+        # coral loss calculation
+        src_examples = F.im2col(src_examples, 3, 1, 1)
+        src_examples = F.reshape(src_examples, (n_data, c, 3 * 3, w, h))
+        src_examples = F.transpose(src_examples, axes=(0, 3, 4, 1, 2))
+        src_examples = F.reshape(src_examples, (n_data * w * h, c * 3 * 3))
+        tgt_examples = F.im2col(tgt_examples, 3, 1, 1)
+        tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
+        tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
+        tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
+        n_data = n_data * w * h
+        norm_coef = 1 / (4 * (c * 3 * 3) ** 2)
+
+        xp = self.cls.xp
+        colvec_1 = xp.ones((1, n_data), dtype=np.float32)
+        _s_tempmat = F.matmul(Variable(colvec_1), src_examples)
+        _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
+        s_cov_mat = (F.matmul(F.transpose(src_examples), src_examples) - F.matmul(F.transpose(_s_tempmat),
+                                                                                  _s_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+        t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
+                                                                                  _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+        coral_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef * self.CORAL_weight
+
+        # loss_coral_sum += coral_loss.data
+        coral_loss.backward()
+
+        cls_optimizer.update()
 
         for s_map, t_map  in zip(src_fmap, tgt_fmap):
              s_map.unchain_backward()
              t_map.unchain_backward()
 
-        loss_t_enc_sum += loss_t_enc.data
-        loss_cls_sum += cls_loss.data
+        # loss_t_enc_sum += loss_t_enc.data
+        # loss_cls_sum += cls_loss.data
 
-        # loss_t_enc_sum /= self.current_tgt_step
-        # loss_cls_sum /= self.current_tgt_step
 
-        chainer.reporter.report({'loss_t_enc': loss_t_enc_sum})
-        chainer.reporter.report({'loss_dis': loss_dis_sum})
-        chainer.reporter.report({'loss_cls': loss_cls_sum})
-        chainer.reporter.report({'loss_dis_src': loss_dis_src_sum})
-        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt_sum})
+        chainer.reporter.report({'loss_t_enc': loss_t_enc.data})
+        chainer.reporter.report({'loss_dis': loss_dis.data})
+        chainer.reporter.report({'loss_cls': cls_loss.data})
+        chainer.reporter.report({'loss_dis_src': loss_dis_src.data})
+        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt.data})
 
 
 class DA_updater1_buf_2_coral_(chainer.training.StandardUpdater):
