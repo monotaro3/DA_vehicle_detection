@@ -729,6 +729,11 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         loss_dis.backward()
         dis_optimizer.update()
 
+        loss_dis.unchain_backward()
+        del loss_dis
+        del src_fmap_dis
+        del tgt_fmap_dis
+
         # loss_t_enc_sum = 0
         # loss_cls_sum = 0
 
@@ -763,7 +768,7 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         # cls_optimizer.update()
 
         #debug code
-        print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
+        # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
 
         # coral loss
         # self.cls.cleargrads()
@@ -781,7 +786,7 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
              t_map.unchain_backward()
 
         # debug code
-        print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
+        # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
 
         # src_examples = src_fmap[0][:batchsize_tgt]
         # tgt_examples = tgt_fmap[0][:batchsize_tgt]
