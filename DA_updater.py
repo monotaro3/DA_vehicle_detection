@@ -665,7 +665,8 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
-        self.coral_batchsize = 16 #hardcoding to be fixed
+        self.coral_batchsize = 16 #hardcoding to be removed
+        self.CORAL_weight = 1 #hardcoding to be removed
 
     def update_core(self):
 
@@ -808,7 +809,6 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
 
         # loss_t_enc_sum += loss_t_enc.data
         # loss_cls_sum += cls_loss.data
-
 
         chainer.reporter.report({'loss_t_enc': loss_t_enc.data})
         chainer.reporter.report({'loss_dis': loss_dis.data})
