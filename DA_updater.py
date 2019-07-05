@@ -822,9 +822,9 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
 
         cls_optimizer.update()
 
-        for s_map, t_map  in zip(src_fmap, tgt_fmap):
-             s_map.unchain_backward()
-             t_map.unchain_backward()
+        # for s_map, t_map  in zip(src_fmap, tgt_fmap):
+        #      s_map.unchain_backward()
+        #      t_map.unchain_backward()
 
         # loss_t_enc_sum += loss_t_enc.data
         # loss_cls_sum += cls_loss.data
