@@ -730,7 +730,9 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         dis_optimizer.update()
 
         loss_dis.unchain_backward()
-        del loss_dis
+        loss_dis = loss_dis.data
+        loss_dis_src = loss_dis_src.data
+        loss_dis_tgt = loss_dis_tgt.data
         del src_fmap_dis
         del tgt_fmap_dis
 
@@ -767,6 +769,7 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         cls_loss.backward()
         # cls_optimizer.update()
 
+
         #debug code
         # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
 
@@ -787,6 +790,12 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
 
         del src_fmap
         del tgt_fmap
+
+        loss_t_enc.unchain_backward()
+        cls_loss.unchain_backward()
+
+        loss_t_enc = loss_t_enc.data
+        cls_loss = cls_loss.data
 
         # debug code
         # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
@@ -822,6 +831,8 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
 
         cls_optimizer.update()
 
+
+
         # for s_map, t_map  in zip(src_fmap, tgt_fmap):
         #      s_map.unchain_backward()
         #      t_map.unchain_backward()
@@ -829,11 +840,11 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         # loss_t_enc_sum += loss_t_enc.data
         # loss_cls_sum += cls_loss.data
 
-        chainer.reporter.report({'loss_t_enc': loss_t_enc.data})
-        chainer.reporter.report({'loss_dis': loss_dis.data})
-        chainer.reporter.report({'loss_cls': cls_loss.data})
-        chainer.reporter.report({'loss_dis_src': loss_dis_src.data})
-        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt.data})
+        chainer.reporter.report({'loss_t_enc': loss_t_enc})
+        chainer.reporter.report({'loss_dis': loss_dis})
+        chainer.reporter.report({'loss_cls': cls_loss})
+        chainer.reporter.report({'loss_dis_src': loss_dis_src})
+        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
 
 
 class DA_updater1_buf_2_coral_(chainer.training.StandardUpdater):
