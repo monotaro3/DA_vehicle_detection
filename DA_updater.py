@@ -762,6 +762,9 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         cls_loss.backward()
         # cls_optimizer.update()
 
+        #debug code
+        print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
+
         # coral loss
         # self.cls.cleargrads()
         # arguments = {'s_imgs': batch_source_array[0], 'gt_mb_locs': batch_source_array[1],
@@ -772,34 +775,42 @@ class CORAL_Adv_updater(chainer.training.StandardUpdater):
         batchsize_tgt = self.coral_batchsize
         # src_fmap = self.extractor(s_imgs)
         # tgt_fmap = self.extractor(t_imgs)
-        src_examples = src_fmap[0][:batchsize_tgt]
-        tgt_examples = tgt_fmap[0][:batchsize_tgt]
-        n_data, c, w, h = src_examples.shape
 
-        # coral loss calculation
-        src_examples = F.im2col(src_examples, 3, 1, 1)
-        src_examples = F.reshape(src_examples, (n_data, c, 3 * 3, w, h))
-        src_examples = F.transpose(src_examples, axes=(0, 3, 4, 1, 2))
-        src_examples = F.reshape(src_examples, (n_data * w * h, c * 3 * 3))
-        tgt_examples = F.im2col(tgt_examples, 3, 1, 1)
-        tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
-        tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
-        tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
-        n_data = n_data * w * h
-        norm_coef = 1 / (4 * (c * 3 * 3) ** 2)
+        for s_map, t_map  in zip(src_fmap, tgt_fmap):
+             s_map.unchain_backward()
+             t_map.unchain_backward()
 
-        xp = self.cls.xp
-        colvec_1 = xp.ones((1, n_data), dtype=np.float32)
-        _s_tempmat = F.matmul(Variable(colvec_1), src_examples)
-        _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
-        s_cov_mat = (F.matmul(F.transpose(src_examples), src_examples) - F.matmul(F.transpose(_s_tempmat),
-                                                                                  _s_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
-        t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
-                                                                                  _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
-        coral_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef * self.CORAL_weight
+        # debug code
+        print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
 
-        # loss_coral_sum += coral_loss.data
-        coral_loss.backward()
+        # src_examples = src_fmap[0][:batchsize_tgt]
+        # tgt_examples = tgt_fmap[0][:batchsize_tgt]
+        # n_data, c, w, h = src_examples.shape
+        #
+        # # coral loss calculation
+        # src_examples = F.im2col(src_examples, 3, 1, 1)
+        # src_examples = F.reshape(src_examples, (n_data, c, 3 * 3, w, h))
+        # src_examples = F.transpose(src_examples, axes=(0, 3, 4, 1, 2))
+        # src_examples = F.reshape(src_examples, (n_data * w * h, c * 3 * 3))
+        # tgt_examples = F.im2col(tgt_examples, 3, 1, 1)
+        # tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
+        # tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
+        # tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
+        # n_data = n_data * w * h
+        # norm_coef = 1 / (4 * (c * 3 * 3) ** 2)
+        #
+        # xp = self.cls.xp
+        # colvec_1 = xp.ones((1, n_data), dtype=np.float32)
+        # _s_tempmat = F.matmul(Variable(colvec_1), src_examples)
+        # _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
+        # s_cov_mat = (F.matmul(F.transpose(src_examples), src_examples) - F.matmul(F.transpose(_s_tempmat),
+        #                                                                           _s_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+        # t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
+        #                                                                           _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+        # coral_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef * self.CORAL_weight
+        #
+        # # loss_coral_sum += coral_loss.data
+        # coral_loss.backward()
 
         cls_optimizer.update()
 
