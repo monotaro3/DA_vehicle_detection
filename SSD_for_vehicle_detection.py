@@ -8,7 +8,7 @@ from chainer import Chain, initializers
 import chainer.links as L
 import chainer.functions as F
 from chainercv import utils
-from chainer import Variable
+from chainer import Variable, link_hooks
 # from chainercv.links.model.ssd.multibox_coder import _unravel_index
 
 
@@ -567,10 +567,10 @@ class DA4_discriminator_sn(Chain):
         #     'initial_bias': initializers.Zero(),
         # }
         with self.init_scope():
-            self.conv1 = L.Convolution2D(1024, 3, pad=1).add_hook(chainer.link_hooks.SpectralNormalization())
-            self.conv2 = L.Convolution2D(512, 1).add_hook(chainer.link_hooks.SpectralNormalization())
-            self.conv3 = L.Convolution2D(256, 1).add_hook(chainer.link_hooks.SpectralNormalization())
-            self.conv4 = L.Convolution2D(1, 1).add_hook(chainer.link_hooks.SpectralNormalization())
+            self.conv1 = L.Convolution2D(1024, 3, pad=1).add_hook(link_hooks.SpectralNormalization())
+            self.conv2 = L.Convolution2D(512, 1).add_hook(link_hooks.SpectralNormalization())
+            self.conv3 = L.Convolution2D(256, 1).add_hook(link_hooks.SpectralNormalization())
+            self.conv4 = L.Convolution2D(1, 1).add_hook(link_hooks.SpectralNormalization())
 
     def __call__(self, x):
         h = F.leaky_relu(self.conv1(x[0]))
