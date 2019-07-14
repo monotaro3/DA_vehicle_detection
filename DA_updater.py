@@ -784,6 +784,9 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         # del src_fmap
         # del tgt_fmap
+        #debug
+        print("iteration:{}".format(self.iteration))
+        del tgt_fmap
 
         loss_t_enc.unchain_backward()
         cls_loss.unchain_backward()
