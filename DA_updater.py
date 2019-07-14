@@ -778,9 +778,9 @@ class Adv_updater(chainer.training.StandardUpdater):
             rec_optimizer.update()
             loss_rec = loss_rec.data
 
-        for s_map, t_map  in zip(src_fmap, tgt_fmap):
-             s_map.unchain_backward()
-             t_map.unchain_backward()
+        # for s_map, t_map  in zip(src_fmap, tgt_fmap):
+        #      s_map.unchain_backward()
+        #      t_map.unchain_backward()
 
         # del src_fmap
         # del tgt_fmap
@@ -790,8 +790,6 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         loss_t_enc = loss_t_enc.data
         cls_loss = cls_loss.data
-
-
 
         cls_optimizer.update()
 
