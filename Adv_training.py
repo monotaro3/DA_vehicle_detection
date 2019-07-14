@@ -79,7 +79,7 @@ def main():
     if args.reconstructor:
         from SSD_for_vehicle_detection import Recontructor
         reconstructor = Recontructor(args.reconstructor)
-        models += reconstructor
+        models.append(reconstructor)
 
     if args.tgt_anno_data:
         if args.s_t_ratio:
