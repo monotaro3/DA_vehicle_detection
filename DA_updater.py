@@ -681,7 +681,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         cls_optimizer = self.get_optimizer('opt_cls')
         if self.reconstructor:
             rec_optimizer = self.get_optimizer('opt_rec')
-            if self.iteration == 1:
+            if self.iteration == 0:
                 print("reconstructor active") #debug code
         xp = self.dis.xp
         func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.gpu_num)) if self.gpu_num >= 0 else lambda x: x
@@ -766,7 +766,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         cls_loss.backward()
 
         if self.reconstructor:
-            image_rec = self.reconstructor(tgt_fmap)
+            image_rec = self.reconstructor(tgt_fmap[0])
             loss_rec = F.mean_absolute_error(image_rec,batch_target)
             loss_rec.backward()
             rec_optimizer.update()
