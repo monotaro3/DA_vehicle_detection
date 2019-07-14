@@ -656,6 +656,190 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
         #         tgt_fmap[i] = chainer.cuda.to_cpu(tgt_fmap[i].data)
         # self.buf.set_examples(src_fmap,tgt_fmap)
 
+class Adv_updater(chainer.training.StandardUpdater):
+    def __init__(self, *args, **kwargs):
+        self.dis, self.cls = kwargs.pop('models')
+        self.buf = kwargs.pop('buffer')
+        # self.coral_batchsize = kwargs.pop('coral_batchsize')
+        # self.CORAL_weight = kwargs.pop('coral_weight')
+        self.gpu_num = kwargs["device"]
+        super(Adv_updater, self).__init__(*args, **kwargs)
+        self.t_enc = self.cls.extractor
+        self.alpha = 1
+        self.k = 3
+        # self.coral_batchsize = 16 #hardcoding to be removed
+        # self.CORAL_weight = 1 #hardcoding to be removed
+
+    def update_core(self):
+
+        dis_optimizer = self.get_optimizer('opt_dis')
+        cls_optimizer = self.get_optimizer('opt_cls')
+        xp = self.dis.xp
+        func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.gpu_num)) if self.gpu_num >= 0 else lambda x: x
+
+        batch_source = self.get_iterator('main').next()
+        batch_source_array = convert.concat_examples(batch_source,self.device)
+        src_fmap = self.t_enc(batch_source_array[0])  # src feature map
+        batch_target = self.get_iterator('target').next()
+        batchsize = len(batch_target)
+        use_bufsize = int(batchsize/2)
+
+        size = 0
+        if batchsize >= 2:
+            size, e_buf_src , e_buf_tgt = self.buf.get_examples(use_bufsize)
+
+        if size != 0:
+            src_fmap_dis = []
+            for i in range(len(src_fmap)):
+                src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.gpu_num), Variable(func_bGPU(e_buf_src[i])))))
+                src_fmap_dis[i].unchain_backward()
+        else:
+            src_fmap_dis = []
+            for i in range(len(src_fmap)):
+                src_fmap_dis.append(F.copy(src_fmap[i],self.gpu_num))
+                src_fmap_dis[i].unchain_backward()
+
+        y_source = self.dis(src_fmap_dis)
+
+        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        tgt_fmap_dis = []
+        for i in range(len(tgt_fmap)):
+            tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
+            tgt_fmap_dis[i].unchain_backward()
+            if size > 0:
+                tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i]))])
+
+        y_target = self.dis(tgt_fmap_dis)
+
+        n_fmap_elements = y_target.shape[2]*y_target.shape[3]
+
+        loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+        loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+        loss_dis = loss_dis_src + loss_dis_tgt
+
+        self.dis.cleargrads()
+        loss_dis.backward()
+        dis_optimizer.update()
+
+        loss_dis.unchain_backward()
+        loss_dis = loss_dis.data
+        loss_dis_src = loss_dis_src.data
+        loss_dis_tgt = loss_dis_tgt.data
+        del src_fmap_dis
+        del tgt_fmap_dis
+
+        #save fmap to buffer
+        src_fmap_tobuf = []
+        tgt_fmap_tobuf = []
+        for i in range(len(src_fmap)):
+            src_fmap_tobuf.append(chainer.cuda.to_cpu(src_fmap[i].data[:use_bufsize]))
+            tgt_fmap_tobuf.append(chainer.cuda.to_cpu(tgt_fmap[i].data[:use_bufsize]))
+        self.buf.set_examples(src_fmap_tobuf, tgt_fmap_tobuf)
+
+        batch_source = self.get_iterator('main').next()
+        batch_source_array = convert.concat_examples(batch_source, self.device)
+        batch_target = self.get_iterator('target').next()
+        src_fmap = self.t_enc(batch_source_array[0])  # src feature map
+        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+
+        y_target_enc = self.dis(tgt_fmap)
+        loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
+
+        #update cls(and t_enc) by cls_loss and loss_t_enc
+        self.cls.cleargrads()
+        loss_t_enc.backward()
+
+        mb_locs, mb_confs = self.cls.multibox(src_fmap)
+        loc_loss, conf_loss = multibox_loss(
+            mb_locs, mb_confs, batch_source_array[1], batch_source_array[2], self.k)
+        cls_loss = loc_loss * self.alpha + conf_loss #cls loss
+
+
+        cls_loss.backward()
+        # cls_optimizer.update()
+
+
+        #debug code
+        # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
+
+        # coral loss
+        # self.cls.cleargrads()
+        # arguments = {'s_imgs': batch_source_array[0], 'gt_mb_locs': batch_source_array[1],
+        #              'gt_mb_labels': batch_source_array[2], 't_imgs': batch_target[:self.coral_batchsize]}
+        # arguments['mode'] = 'CORAL'
+        #
+        # coral_loss = self.coral_loss_func(**arguments)
+        # batchsize_tgt = self.coral_batchsize
+        # src_fmap = self.extractor(s_imgs)
+        # tgt_fmap = self.extractor(t_imgs)
+
+        for s_map, t_map  in zip(src_fmap, tgt_fmap):
+             s_map.unchain_backward()
+             t_map.unchain_backward()
+
+        del src_fmap
+        del tgt_fmap
+
+        loss_t_enc.unchain_backward()
+        cls_loss.unchain_backward()
+
+        loss_t_enc = loss_t_enc.data
+        cls_loss = cls_loss.data
+
+        # debug code
+        # print("conv1_1.W[1].grad:{}".format(self.cls.extractor.conv1_1.W[1].grad))
+
+        # src_fmap = self.t_enc(batch_source_array[0])  # src feature map
+        # tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        #
+        # src_examples = src_fmap[0][:batchsize_tgt]
+        # tgt_examples = tgt_fmap[0][:batchsize_tgt]
+        # n_data, c, w, h = src_examples.shape
+
+        # coral loss calculation
+        # src_examples = F.im2col(src_examples, 3, 1, 1)
+        # src_examples = F.reshape(src_examples, (n_data, c, 3 * 3, w, h))
+        # src_examples = F.transpose(src_examples, axes=(0, 3, 4, 1, 2))
+        # src_examples = F.reshape(src_examples, (n_data * w * h, c * 3 * 3))
+        # tgt_examples = F.im2col(tgt_examples, 3, 1, 1)
+        # tgt_examples = F.reshape(tgt_examples, (n_data, c, 3 * 3, w, h))
+        # tgt_examples = F.transpose(tgt_examples, axes=(0, 3, 4, 1, 2))
+        # tgt_examples = F.reshape(tgt_examples, (n_data * w * h, c * 3 * 3))
+        # n_data = n_data * w * h
+        # norm_coef = 1 / (4 * (c * 3 * 3) ** 2)
+
+        # xp = self.cls.xp
+        # colvec_1 = xp.ones((1, n_data), dtype=np.float32)
+        # _s_tempmat = F.matmul(Variable(colvec_1), src_examples)
+        # _t_tempmat = F.matmul(Variable(colvec_1), tgt_examples)
+        # s_cov_mat = (F.matmul(F.transpose(src_examples), src_examples) - F.matmul(F.transpose(_s_tempmat),
+        #                                                                           _s_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+        # t_cov_mat = (F.matmul(F.transpose(tgt_examples), tgt_examples) - F.matmul(F.transpose(_t_tempmat),
+        #                                                                           _t_tempmat) / n_data) / n_data - 1 if n_data > 1 else 1
+        # coral_loss = F.sum(F.squared_error(s_cov_mat, t_cov_mat)) * norm_coef * self.CORAL_weight
+
+        # loss_coral_sum += coral_loss.data
+        # coral_loss.backward()
+
+        cls_optimizer.update()
+
+        # coral_loss = coral_loss.data
+
+
+        # for s_map, t_map  in zip(src_fmap, tgt_fmap):
+        #      s_map.unchain_backward()
+        #      t_map.unchain_backward()
+
+        # loss_t_enc_sum += loss_t_enc.data
+        # loss_cls_sum += cls_loss.data
+
+        chainer.reporter.report({'loss_t_enc': loss_t_enc})
+        chainer.reporter.report({'loss_dis': loss_dis})
+        chainer.reporter.report({'loss_cls': cls_loss})
+        chainer.reporter.report({'loss_dis_src': loss_dis_src})
+        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
+        # chainer.reporter.report({'loss_CORAL': coral_loss})
+
 class CORAL_Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, bufmode = 0,batchmode = 0, cls_train_mode = 0, init_disstep = 1, init_tgtstep = 1, tgt_steps_schedule = None, *args, **kwargs):
         self.dis, self.cls = kwargs.pop('models')
