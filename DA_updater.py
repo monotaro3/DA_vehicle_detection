@@ -797,7 +797,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         if self.reconstructor:
             tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
             for i in range(len(tgt_fmap)-1):
-                tgt_fmap = tgt_fmap.pop()
+                t_map = tgt_fmap.pop()
                 t_map.unchain_backward()
                 del t_map
             # del src_fmap
