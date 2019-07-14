@@ -50,6 +50,7 @@ def main():
     # parser.add_argument('--Alt_update_param', type=int, help='parameters of alternative update', nargs = 3, choices = [0,1])
     # parser.add_argument('--multibatch_times', type=int, help='number of multiplication of batchsize for discriminator learning')
     parser.add_argument('--updater', type=str, help='Updater class name to be used')
+    parser.add_argument('--reconstructor', type=str, choices = ["deconv","unpool","unpool_conv"], help='upsampling type of reconstructor')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -68,12 +69,17 @@ def main():
     report_keys = ["loss_cls", "loss_t_enc", "loss_dis", 'loss_dis_src', 'loss_dis_tgt', 'validation/main/map',
                    'validation/main/RR/car',
                    'validation/main/PR/car', 'validation/main/FAR/car', 'validation/main/F1/car', 'lr_dis', 'lr_cls']
-
+    if args.reconstructor:
+        report_keys += "loss_rec"
 
     Discriminator = eval(args.dis_class)
     discriminator = Discriminator()
     ssd_model = initSSD("ssd300",0.3,args.ssdpath)
     models = [discriminator, ssd_model]
+    if args.reconstructor:
+        from SSD_for_vehicle_detection import Recontructor
+        reconstructor = Recontructor(args.reconstructor)
+        models += reconstructor
 
     if args.tgt_anno_data:
         if args.s_t_ratio:
@@ -133,6 +139,8 @@ def main():
     opts = {}
     opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     opts["opt_cls"] = make_optimizer(ssd_model, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    if args.reconstructor:
+        opts["opt_rec"] = make_optimizer(reconstructor, args.adam_alpha, args.adam_beta1, args.adam_beta2)
 
     updater_args["optimizer"] = opts
     updater_args["models"] = models

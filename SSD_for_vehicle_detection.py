@@ -603,6 +603,71 @@ class DA4_discriminator_bn(Chain):
         h = F.leaky_relu(self.conv4(h))
         return h
 
+class Recontructor(Chain):
+    def __init__(self,upsample="deconv"):
+        #w = chainer.initializers.Normal(wscale)
+        self.upsample = upsample
+        super(Recontructor, self).__init__()
+        with self.init_scope():
+            self.conv4_3 = L.Convolution2D(512,3,pad=1)
+            self.conv4_2 = L.Convolution2D(512, 3, pad=1)
+            self.conv4_1 = L.Convolution2D(512, 3, pad=1)
+            self.conv3_3 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_2 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_1 = L.Convolution2D(256, 3, pad=1)
+            self.conv2_2 = L.Convolution2D(128, 3, pad=1)
+            self.conv2_1 = L.Convolution2D(128, 3, pad=1)
+            self.conv1_2 = L.Convolution2D(64, 3, pad=1)
+            self.conv1_1 = L.Convolution2D(64, 3, pad=1)
+            self.conv0 = L.Convolution2D(3, 3, pad=1)
+            if self.upsample == "deconv":
+                self.up_conv3 = L.Deconvolution2D(512,3,stride=2,pad=1)
+                self.up_conv2 = L.Deconvolution2D(256, 3, stride=2, pad=1)
+                self.up_conv1 = L.Deconvolution2D(128, 3, stride=2, pad=1)
+            elif self.upsample == "unpool_conv":
+                self.up_conv3 = L.Convolution2D(512,3,pad=1)
+                self.up_conv2 = L.Convolution2D(256, 3, pad=1)
+                self.up_conv1 = L.Convolution2D(128, 3, pad=1)
+
+    def __call__(self, x):
+        h = self.conv4_3(x)
+        h = self.conv4_2(h)
+        h = self.conv4_1(h)
+        if self.upsample == "deconv":
+            h = self.up_conv3(h)
+        else:
+            h = F.unpooling_2d(h,2)
+        # h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')
+        if self.upsample == "unpool_conv":
+            h = self.up_conv3(h)
+        h = self.conv3_3(h)
+        h = self.conv3_2(h)
+        h = self.conv3_1(h)
+        if self.upsample == "deconv":
+            h = self.up_conv2(h)
+        else:
+            h = F.unpooling_2d(h,2)
+        h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')  #reflectpad can be an option
+        if self.upsample == "unpool_conv":
+            h = self.up_conv2(h)
+        h = self.conv2_2(h)
+        h = self.conv2_1(h)
+        if self.upsample == "deconv":
+            h = self.up_conv1(h)
+        else:
+            h = F.unpooling_2d(h,2)
+        h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')
+        if self.upsample == "unpool_conv":
+            h = self.up_conv1(h)
+        h = self.conv1_2(h)
+        h = self.conv1_1(h)
+        h = self.conv0(h)
+        return h
+
+
+
+
+
 import random
 import numpy as np
 import math
