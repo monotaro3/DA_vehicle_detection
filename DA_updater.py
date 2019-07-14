@@ -796,10 +796,10 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
-            # for i, (s_map, t_map) in enumerate(zip(src_fmap, tgt_fmap)):
-            #     s_map.unchain_backward()
-            #     if i > 0:
-            #         t_map.unchain_backward()
+            for i in range(len(tgt_fmap)-1):
+                tgt_fmap = tgt_fmap.pop()
+                t_map.unchain_backward()
+                del t_map
             # del src_fmap
             image_rec = self.reconstructor(tgt_fmap[0])
             loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
