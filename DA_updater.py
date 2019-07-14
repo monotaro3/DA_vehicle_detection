@@ -765,34 +765,47 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         cls_loss.backward()
 
-        if self.reconstructor:
-            # tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
-            for i, (s_map, t_map) in enumerate(zip(src_fmap, tgt_fmap)):
-                s_map.unchain_backward()
-                if i > 0:
-                    t_map.unchain_backward()
-            del src_fmap
-            image_rec = self.reconstructor(tgt_fmap[0])
-            loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
-            loss_rec.backward()
-            rec_optimizer.update()
-            loss_rec = loss_rec.data
+        # if self.reconstructor:
+        #     # tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+        #     for i, (s_map, t_map) in enumerate(zip(src_fmap, tgt_fmap)):
+        #         s_map.unchain_backward()
+        #         if i > 0:
+        #             t_map.unchain_backward()
+        #     del src_fmap
+        #     image_rec = self.reconstructor(tgt_fmap[0])
+        #     loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
+        #     loss_rec.backward()
+        #     rec_optimizer.update()
+        #     loss_rec = loss_rec.data
 
-        # for s_map, t_map  in zip(src_fmap, tgt_fmap):
-        #      s_map.unchain_backward()
-        #      t_map.unchain_backward()
+        for s_map, t_map  in zip(src_fmap, tgt_fmap):
+             s_map.unchain_backward()
+             t_map.unchain_backward()
 
-        # del src_fmap
-        # del tgt_fmap
+        del src_fmap
+        del tgt_fmap
         #debug
         print("iteration:{}".format(self.iteration))
-        del tgt_fmap
+        # del tgt_fmap
 
         loss_t_enc.unchain_backward()
         cls_loss.unchain_backward()
 
         loss_t_enc = loss_t_enc.data
         cls_loss = cls_loss.data
+
+        if self.reconstructor:
+            tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+            # for i, (s_map, t_map) in enumerate(zip(src_fmap, tgt_fmap)):
+            #     s_map.unchain_backward()
+            #     if i > 0:
+            #         t_map.unchain_backward()
+            # del src_fmap
+            image_rec = self.reconstructor(tgt_fmap[0])
+            loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
+            loss_rec.backward()
+            rec_optimizer.update()
+            loss_rec = loss_rec.data
 
         cls_optimizer.update()
 
