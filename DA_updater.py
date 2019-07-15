@@ -807,6 +807,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.cls.cleargrads()
 
         if self.reconstructor:
+            self.reconstructor.cleargrads()
             # self.rec_batch_split = 16
             loss_rec_sum = 0
             # loss_weight = 0.1
