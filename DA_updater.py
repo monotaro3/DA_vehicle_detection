@@ -805,7 +805,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             loss_weight = 1.
             for b_num in range(-(-len(batch_target)//batchsize_split)):
                 batch_split = batch_target[batchsize_split*b_num:batchsize_split*(b_num+1)]
-                t_data = Variable(xp.array(batch_split)) #// 255
+                t_data = Variable(xp.array(batch_split)) / 255
                 tgt_fmap = self.t_enc(t_data)
                 for i in range(len(tgt_fmap)-1):
                     t_map = tgt_fmap.pop()
