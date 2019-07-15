@@ -661,6 +661,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         models = kwargs.pop('models')
         if len(models) == 3:
             self.reconstructor = models.pop()
+            self.reconstructor_alt = False
         else:
             self.reconstructor = None
         self.dis, self.cls = models
@@ -794,6 +795,10 @@ class Adv_updater(chainer.training.StandardUpdater):
         loss_t_enc = loss_t_enc.data
         cls_loss = cls_loss.data
 
+        if self.reconstructor and self.reconstructor_alt:
+            cls_optimizer.update()
+            self.cls.cleargrads()
+
         if self.reconstructor:
             batchsize_split = 16
             loss_rec_sum = 0
@@ -815,9 +820,11 @@ class Adv_updater(chainer.training.StandardUpdater):
                 loss_rec_sum += loss_rec.data
                 del loss_rec
             rec_optimizer.update()
+            cls_optimizer.update()
             # loss_rec = loss_rec.data
 
-        cls_optimizer.update()
+        if not self.reconstructor:
+            cls_optimizer.update()
 
         chainer.reporter.report({'loss_t_enc': loss_t_enc})
         chainer.reporter.report({'loss_dis': loss_dis})
