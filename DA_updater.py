@@ -661,7 +661,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         models = kwargs.pop('models')
         if len(models) == 3:
             self.reconstructor = models.pop()
-            self.reconstructor_alt = False
+            self.reconstructor_alt = True
         else:
             self.reconstructor = None
         self.dis, self.cls = models
@@ -802,8 +802,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         if self.reconstructor:
             batchsize_split = 16
             loss_rec_sum = 0
-            loss_weight = 0.1
-            print("rec loss weight:{}".format(loss_weight)) #debug
+            loss_weight = 1.
             for b_num in range(-(-len(batch_target)//batchsize_split)):
                 batch_split = batch_target[batchsize_split*b_num:batchsize_split*(b_num+1)]
                 t_data = Variable(xp.array(batch_split)) #// 255
