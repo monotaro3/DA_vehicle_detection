@@ -757,7 +757,7 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         #update cls(and t_enc) by cls_loss and loss_t_enc
         self.cls.cleargrads()
-        loss_t_enc.backward()
+        # loss_t_enc.backward()
 
         mb_locs, mb_confs = self.cls.multibox(src_fmap)
         loc_loss, conf_loss = multibox_loss(
