@@ -795,18 +795,27 @@ class Adv_updater(chainer.training.StandardUpdater):
         cls_loss = cls_loss.data
 
         if self.reconstructor:
-            tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
-            for i in range(len(tgt_fmap)-1):
-                t_map = tgt_fmap.pop()
-                t_map.unchain_backward()
-                del t_map
-            # del src_fmap
-            image_rec = self.reconstructor(tgt_fmap[0])
-            # loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
-            loss_rec = F.mean_squared_error(image_rec, Variable(xp.array(batch_target)))
-            loss_rec.backward()
+            batchsize_split = 16
+            loss_rec_sum = 0
+            loss_weight = 1.
+            for b_num in range(-(-len(batch_target)//batchsize_split)):
+                batch_split = batch_target[batchsize_split*b_num:batchsize_split*(b_num+1)]
+                t_data = Variable(xp.array(batch_split)) // 255
+                tgt_fmap = self.t_enc(t_data)
+                for i in range(len(tgt_fmap)-1):
+                    t_map = tgt_fmap.pop()
+                    t_map.unchain_backward()
+                    del t_map
+                # del src_fmap
+                image_rec = self.reconstructor(tgt_fmap[0])
+                # loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
+                loss_rec = F.mean_squared_error(image_rec, t_data) * loss_weight
+                loss_rec.backward()
+                loss_rec.unchain_backward()
+                loss_rec_sum += loss_rec.data
+                del loss_rec
             rec_optimizer.update()
-            loss_rec = loss_rec.data
+            # loss_rec = loss_rec.data
 
         cls_optimizer.update()
 
@@ -816,7 +825,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         chainer.reporter.report({'loss_dis_src': loss_dis_src})
         chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
         if self.reconstructor:
-            chainer.reporter.report({'loss_rec': loss_rec})
+            chainer.reporter.report({'loss_rec': loss_rec_sum})
 
 class CORAL_Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, bufmode = 0,batchmode = 0, cls_train_mode = 0, init_disstep = 1, init_tgtstep = 1, tgt_steps_schedule = None, *args, **kwargs):
