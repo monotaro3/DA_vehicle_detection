@@ -667,6 +667,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.rec_adv = not (kwargs.pop('rec_noadv'))
         else:
             self.reconstructor = None
+            self.rec_adv = True
         self.dis, self.cls = models
         self.buf = kwargs.pop('buffer')
         # self.coral_batchsize = kwargs.pop('coral_batchsize')
