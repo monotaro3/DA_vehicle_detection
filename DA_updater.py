@@ -661,7 +661,10 @@ class Adv_updater(chainer.training.StandardUpdater):
         models = kwargs.pop('models')
         if len(models) == 3:
             self.reconstructor = models.pop()
-            self.reconstructor_alt = True
+            self.rec_weight = kwargs.pop('rec_weight')
+            self.rec_batch_split = kwargs.pop('rec_batch_split')
+            self.rec_alt = not(kwargs.pop('rec_noalt'))#True
+            self.rec_adv = not (kwargs.pop('rec_noadv'))
         else:
             self.reconstructor = None
         self.dis, self.cls = models
@@ -687,64 +690,66 @@ class Adv_updater(chainer.training.StandardUpdater):
         xp = self.dis.xp
         func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.gpu_num)) if self.gpu_num >= 0 else lambda x: x
 
-        batch_source = self.get_iterator('main').next()
-        batch_source_array = convert.concat_examples(batch_source,self.device)
-        src_fmap = self.t_enc(batch_source_array[0])  # src feature map
-        batch_target = self.get_iterator('target').next()
-        batchsize = len(batch_target)
-        use_bufsize = int(batchsize/2)
+        if self.rec_adv:
 
-        size = 0
-        if batchsize >= 2:
-            size, e_buf_src , e_buf_tgt = self.buf.get_examples(use_bufsize)
+            batch_source = self.get_iterator('main').next()
+            batch_source_array = convert.concat_examples(batch_source,self.device)
+            src_fmap = self.t_enc(batch_source_array[0])  # src feature map
+            batch_target = self.get_iterator('target').next()
+            batchsize = len(batch_target)
+            use_bufsize = int(batchsize/2)
 
-        if size != 0:
-            src_fmap_dis = []
+            size = 0
+            if batchsize >= 2:
+                size, e_buf_src , e_buf_tgt = self.buf.get_examples(use_bufsize)
+
+            if size != 0:
+                src_fmap_dis = []
+                for i in range(len(src_fmap)):
+                    src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.gpu_num), Variable(func_bGPU(e_buf_src[i])))))
+                    src_fmap_dis[i].unchain_backward()
+            else:
+                src_fmap_dis = []
+                for i in range(len(src_fmap)):
+                    src_fmap_dis.append(F.copy(src_fmap[i],self.gpu_num))
+                    src_fmap_dis[i].unchain_backward()
+
+            y_source = self.dis(src_fmap_dis)
+
+            tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+            tgt_fmap_dis = []
+            for i in range(len(tgt_fmap)):
+                tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
+                tgt_fmap_dis[i].unchain_backward()
+                if size > 0:
+                    tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i]))])
+
+            y_target = self.dis(tgt_fmap_dis)
+
+            n_fmap_elements = y_target.shape[2]*y_target.shape[3]
+
+            loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+            loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+            loss_dis = loss_dis_src + loss_dis_tgt
+
+            self.dis.cleargrads()
+            loss_dis.backward()
+            dis_optimizer.update()
+
+            loss_dis.unchain_backward()
+            loss_dis = loss_dis.data
+            loss_dis_src = loss_dis_src.data
+            loss_dis_tgt = loss_dis_tgt.data
+            del src_fmap_dis
+            del tgt_fmap_dis
+
+            #save fmap to buffer
+            src_fmap_tobuf = []
+            tgt_fmap_tobuf = []
             for i in range(len(src_fmap)):
-                src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.gpu_num), Variable(func_bGPU(e_buf_src[i])))))
-                src_fmap_dis[i].unchain_backward()
-        else:
-            src_fmap_dis = []
-            for i in range(len(src_fmap)):
-                src_fmap_dis.append(F.copy(src_fmap[i],self.gpu_num))
-                src_fmap_dis[i].unchain_backward()
-
-        y_source = self.dis(src_fmap_dis)
-
-        tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
-        tgt_fmap_dis = []
-        for i in range(len(tgt_fmap)):
-            tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
-            tgt_fmap_dis[i].unchain_backward()
-            if size > 0:
-                tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i]))])
-
-        y_target = self.dis(tgt_fmap_dis)
-
-        n_fmap_elements = y_target.shape[2]*y_target.shape[3]
-
-        loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
-        loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
-        loss_dis = loss_dis_src + loss_dis_tgt
-
-        self.dis.cleargrads()
-        loss_dis.backward()
-        dis_optimizer.update()
-
-        loss_dis.unchain_backward()
-        loss_dis = loss_dis.data
-        loss_dis_src = loss_dis_src.data
-        loss_dis_tgt = loss_dis_tgt.data
-        del src_fmap_dis
-        del tgt_fmap_dis
-
-        #save fmap to buffer
-        src_fmap_tobuf = []
-        tgt_fmap_tobuf = []
-        for i in range(len(src_fmap)):
-            src_fmap_tobuf.append(chainer.cuda.to_cpu(src_fmap[i].data[:use_bufsize]))
-            tgt_fmap_tobuf.append(chainer.cuda.to_cpu(tgt_fmap[i].data[:use_bufsize]))
-        self.buf.set_examples(src_fmap_tobuf, tgt_fmap_tobuf)
+                src_fmap_tobuf.append(chainer.cuda.to_cpu(src_fmap[i].data[:use_bufsize]))
+                tgt_fmap_tobuf.append(chainer.cuda.to_cpu(tgt_fmap[i].data[:use_bufsize]))
+            self.buf.set_examples(src_fmap_tobuf, tgt_fmap_tobuf)
 
         batch_source = self.get_iterator('main').next()
         batch_source_array = convert.concat_examples(batch_source, self.device)
@@ -752,12 +757,12 @@ class Adv_updater(chainer.training.StandardUpdater):
         src_fmap = self.t_enc(batch_source_array[0])  # src feature map
         tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
 
-        y_target_enc = self.dis(tgt_fmap)
-        loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
-
-        #update cls(and t_enc) by cls_loss and loss_t_enc
         self.cls.cleargrads()
-        # loss_t_enc.backward()
+
+        if self.rec_adv:
+            y_target_enc = self.dis(tgt_fmap)
+            loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
+            loss_t_enc.backward()
 
         mb_locs, mb_confs = self.cls.multibox(src_fmap)
         loc_loss, conf_loss = multibox_loss(
@@ -789,22 +794,23 @@ class Adv_updater(chainer.training.StandardUpdater):
         # print("iteration:{}".format(self.iteration))
         # del tgt_fmap
 
-        loss_t_enc.unchain_backward()
-        cls_loss.unchain_backward()
+        if self.rec_adv:
+            loss_t_enc.unchain_backward()
+            loss_t_enc = loss_t_enc.data
 
-        loss_t_enc = loss_t_enc.data
+        cls_loss.unchain_backward()
         cls_loss = cls_loss.data
 
-        if self.reconstructor and self.reconstructor_alt:
+        if self.reconstructor and self.rec_alt:
             cls_optimizer.update()
             self.cls.cleargrads()
 
         if self.reconstructor:
-            batchsize_split = 16
+            # self.rec_batch_split = 16
             loss_rec_sum = 0
-            loss_weight = 0.1
-            for b_num in range(-(-len(batch_target)//batchsize_split)):
-                batch_split = batch_target[batchsize_split*b_num:batchsize_split*(b_num+1)]
+            # loss_weight = 0.1
+            for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
+                batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
                 t_data = Variable(xp.array(batch_split)) #/ 255
                 tgt_fmap = self.t_enc(t_data)
                 for i in range(len(tgt_fmap)-1):
@@ -814,7 +820,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                 # del src_fmap
                 image_rec = self.reconstructor(tgt_fmap[0])
                 # loss_rec = F.mean_absolute_error(image_rec,Variable(xp.array(batch_target)))
-                loss_rec = F.mean_squared_error(image_rec, t_data) * loss_weight
+                loss_rec = F.mean_squared_error(image_rec, t_data) * self.rec_weight
                 loss_rec.backward()
                 loss_rec.unchain_backward()
                 loss_rec_sum += loss_rec.data
@@ -826,11 +832,14 @@ class Adv_updater(chainer.training.StandardUpdater):
         if not self.reconstructor:
             cls_optimizer.update()
 
-        chainer.reporter.report({'loss_t_enc': loss_t_enc})
-        chainer.reporter.report({'loss_dis': loss_dis})
+        if self.rec_adv:
+            chainer.reporter.report({'loss_t_enc': loss_t_enc})
+            chainer.reporter.report({'loss_dis': loss_dis})
+            chainer.reporter.report({'loss_dis_src': loss_dis_src})
+            chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
+
         chainer.reporter.report({'loss_cls': cls_loss})
-        chainer.reporter.report({'loss_dis_src': loss_dis_src})
-        chainer.reporter.report({'loss_dis_tgt': loss_dis_tgt})
+
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
 
