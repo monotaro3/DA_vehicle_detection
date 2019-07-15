@@ -26,7 +26,7 @@ def make_optimizer(model, alpha, beta1, beta2):
 
 def main():
     parser = argparse.ArgumentParser(description='Train script')
-    parser.add_argument('--batchsize', type=int, default=1)
+    parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--max_iter', type=int, default=10)
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result/addatest', help='Directory to output the result')
@@ -51,6 +51,10 @@ def main():
     # parser.add_argument('--multibatch_times', type=int, help='number of multiplication of batchsize for discriminator learning')
     parser.add_argument('--updater', type=str, help='Updater class name to be used')
     parser.add_argument('--reconstructor', type=str, choices = ["deconv","unpool","unpool_conv"], help='upsampling type of reconstructor')
+    parser.add_argument('--rec_weight', type=float, default=1.)
+    parser.add_argument('--rec_batch_split', type=int, default=16)
+    parser.add_argument('--rec_noalt', action="store_true")
+    parser.add_argument('--rec_noadv', action="store_true")
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -135,6 +139,12 @@ def main():
     buffer = fmapBuffer(args.bufsize,mode=args.bufmode,discriminator=discriminator,gpu=args.gpu)
     updater_args["buffer"] = buffer
 
+    if args.reconstructor:
+        updater_args["rec_weight"] = args.rec_weight
+        updater_args["rec_batch_split"] = args.rec_batch_split
+        updater_args["rec_noalt"] = args.rec_noalt
+        updater_args["rec_noadv"] = args.rec_noadv
+
     # Set up optimizers
     opts = {}
     opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
@@ -165,6 +175,14 @@ def main():
     trainer.extend(extensions.PrintReport(**printreport_args),
                    trigger=(args.display_interval, 'iteration'))
     trainer.extend(extensions.ProgressBar(**progress_args))
+
+    trainer.extend(
+        extensions.snapshot_object(ssd_model, 'ssdmodel_iter_{.updater.iteration}'),
+        trigger=(args.max_iter, 'iteration'))
+    if args.reconstructor:
+        trainer.extend(
+            extensions.snapshot_object(reconstructor, 'reconstructor_iter_{.updater.iteration}'),
+            trigger=(args.max_iter, 'iteration'))
 
     bestshot_dir = os.path.join(args.out,"bestshot")
     if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
