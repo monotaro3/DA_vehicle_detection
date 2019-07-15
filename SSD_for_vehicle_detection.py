@@ -630,37 +630,37 @@ class Recontructor(Chain):
                 self.up_conv1 = L.Convolution2D(128, 3, pad=1)
 
     def __call__(self, x):
-        h = self.conv4_3(x)
-        h = self.conv4_2(h)
-        h = self.conv4_1(h)
+        h = F.relu(self.conv4_3(x))
+        h = F.relu(self.conv4_2(h))
+        h = F.relu(self.conv4_1(h))
         if self.upsample == "deconv":
-            h = self.up_conv3(h)
+            h = F.relu(self.up_conv3(h))
         else:
             h = F.unpooling_2d(h,2)
         # h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')
         if self.upsample == "unpool_conv":
-            h = self.up_conv3(h)
-        h = self.conv3_3(h)
-        h = self.conv3_2(h)
-        h = self.conv3_1(h)
+            h = F.relu(self.up_conv3(h))
+        h = F.relu(self.conv3_3(h))
+        h = F.relu(self.conv3_2(h))
+        h = F.relu(self.conv3_1(h))
         if self.upsample == "deconv":
-            h = self.up_conv2(h)
+            h = F.relu(self.up_conv2(h))
         else:
             h = F.unpooling_2d(h,2)
         h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')  #reflectpad can be an option
         if self.upsample == "unpool_conv":
-            h = self.up_conv2(h)
-        h = self.conv2_2(h)
-        h = self.conv2_1(h)
+            h = F.relu(self.up_conv2(h))
+        h = F.relu(self.conv2_2(h))
+        h = F.relu(self.conv2_1(h))
         if self.upsample == "deconv":
-            h = self.up_conv1(h)
+            h = F.relu(self.up_conv1(h))
         else:
             h = F.unpooling_2d(h,2)
         h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')
         if self.upsample == "unpool_conv":
-            h = self.up_conv1(h)
-        h = self.conv1_2(h)
-        h = self.conv1_1(h)
+            h = F.relu(self.up_conv1(h))
+        h = F.relu(self.conv1_2(h))
+        h = F.relu(self.conv1_1(h))
         h = self.conv0(h)
         return h
 
