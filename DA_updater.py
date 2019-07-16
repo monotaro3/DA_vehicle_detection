@@ -689,7 +689,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             rec_optimizer = self.get_optimizer('opt_rec')
             # if self.iteration == 0:
             #     print("reconstructor active") #debug code
-        xp = self.dis.xp
+        xp = self.cls.xp
         func_bGPU = (lambda x: chainer.cuda.to_gpu(x, device=self.gpu_num)) if self.gpu_num >= 0 else lambda x: x
 
         if self.rec_adv:
