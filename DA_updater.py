@@ -659,7 +659,8 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
 class Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         models = kwargs.pop('models')
-        if len(models) == 3:
+        from SSD_for_vehicle_detection import Recontructor
+        if type(models[-1]) == Recontructor:
             self.reconstructor = models.pop()
             self.rec_weight = kwargs.pop('rec_weight')
             self.rec_batch_split = kwargs.pop('rec_batch_split')
@@ -681,8 +682,8 @@ class Adv_updater(chainer.training.StandardUpdater):
         # self.CORAL_weight = 1 #hardcoding to be removed
 
     def update_core(self):
-
-        dis_optimizer = self.get_optimizer('opt_dis')
+        if self.rec_adv:
+            dis_optimizer = self.get_optimizer('opt_dis')
         cls_optimizer = self.get_optimizer('opt_cls')
         if self.reconstructor:
             rec_optimizer = self.get_optimizer('opt_rec')
