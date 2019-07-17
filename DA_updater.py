@@ -681,6 +681,8 @@ class Adv_updater(chainer.training.StandardUpdater):
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
+        self.s_img = None
+        self.t_img = None
         # self.coral_batchsize = 16 #hardcoding to be removed
         # self.CORAL_weight = 1 #hardcoding to be removed
 
@@ -759,7 +761,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         batch_source = self.get_iterator('main').next()
         if self.iteration == 0:
             self.s_img = batch_source[0][0]
-            print("s_img initialized:{}iteration".format(self.iteration)) #debug
+            # print("s_img initialized:{}iteration".format(self.iteration)) #debug
         batch_source_array = convert.concat_examples(batch_source, self.device)
         batch_target = self.get_iterator('target').next()
         if self.iteration == 0:
@@ -854,7 +856,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
             if self.iteration % self.snapshot_interval == 0:
-                print("s_img snapshot:{}iteration".format(self.iteration))  # debug
+                # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
                 s_fmap = self.t_enc(Variable(xp.array([self.s_img])) )
                 s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0].astype(np.uint8)
                 s_img_rec = s_img_rec.transpose(1, 2, 0)
