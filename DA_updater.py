@@ -7,7 +7,8 @@ from chainer.dataset import convert
 from chainercv.links.model.ssd import multibox_loss
 import six
 from chainer.backends import cuda
-
+import cv2 as cv
+import os
 
 class Updater1(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
@@ -674,6 +675,8 @@ class Adv_updater(chainer.training.StandardUpdater):
         # self.coral_batchsize = kwargs.pop('coral_batchsize')
         # self.CORAL_weight = kwargs.pop('coral_weight')
         self.gpu_num = kwargs["device"]
+        self.snapshot_interval = kwargs.pop('snapshot_interval')
+        self.outdir = kwargs.pop('outdir')
         super(Adv_updater, self).__init__(*args, **kwargs)
         self.t_enc = self.cls.extractor
         self.alpha = 1
@@ -754,8 +757,12 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.buf.set_examples(src_fmap_tobuf, tgt_fmap_tobuf)
 
         batch_source = self.get_iterator('main').next()
+        if self.iteration == 0:
+            self.s_img = batch_source[0][0]
         batch_source_array = convert.concat_examples(batch_source, self.device)
         batch_target = self.get_iterator('target').next()
+        if self.iteration == 0:
+            self.t_img = batch_target[0]
         src_fmap = self.t_enc(batch_source_array[0])  # src feature map
         tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
 
@@ -845,6 +852,23 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
+            if self.iteration % self.snapshot_interval == 0:
+                s_fmap = self.t_enc(Variable(xp.array([self.s_img])) )
+                s_img_rec = chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data[0] + self.cls.mean).astype(np.uint8)
+                s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
+                cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration)),s_img_rec)
+                t_fmap = self.t_enc(Variable(xp.array([self.t_img])))
+                t_img_rec = chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data[0] + self.cls.mean).astype(
+                    np.uint8)
+                t_img_rec = cv.cvtColor(t_img_rec, cv.COLOR_RGB2BGR)
+                cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration)), t_img_rec)
+
+    def serialize(self, serializer):
+        super().serialize(serializer)
+        self.buf.serialize(serializer['buf'])
+        if self.reconstructor:
+            self.s_img = serializer('s_img', self.s_img)
+            self.t_img = serializer('t_img', self.t_img)
 
 class CORAL_Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, bufmode = 0,batchmode = 0, cls_train_mode = 0, init_disstep = 1, init_tgtstep = 1, tgt_steps_schedule = None, *args, **kwargs):

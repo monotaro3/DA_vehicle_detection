@@ -159,6 +159,9 @@ def main():
     updater_args["optimizer"] = opts
     updater_args["models"] = models
 
+    updater_args["snapshot_interval"] = args.snapshot_interval
+    updater_args["outdir"] = args.out
+
     # Set up updater and trainer
     updater = Updater(**updater_args)
     trainer = training.Trainer(updater, (args.max_iter, 'iteration'), out=args.out)
