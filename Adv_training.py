@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--updater', type=str, help='Updater class name to be used')
     parser.add_argument('--reconstructor', type=str, choices = ["deconv","unpool","unpool_conv"], help='upsampling type of reconstructor')
     parser.add_argument('--rec_weight', type=float, default=1.)
+    parser.add_argument('--rec_file', type=str)
     parser.add_argument('--rec_batch_split', type=int, default=16)
     parser.add_argument('--rec_noalt', action="store_true")
     parser.add_argument('--rec_noadv', action="store_true")
@@ -83,6 +84,8 @@ def main():
     if args.reconstructor:
         from SSD_for_vehicle_detection import Recontructor
         reconstructor = Recontructor(args.reconstructor)
+        if args.rec_file:
+            serializers.load_npz(args.rec_file, reconstructor)
         models.append(reconstructor)
 
     if args.tgt_anno_data:
