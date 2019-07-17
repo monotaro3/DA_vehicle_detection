@@ -759,6 +759,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         batch_source = self.get_iterator('main').next()
         if self.iteration == 0:
             self.s_img = batch_source[0][0]
+            print("s_img initialized:{}iteration".format(self.iteration)) #debug
         batch_source_array = convert.concat_examples(batch_source, self.device)
         batch_target = self.get_iterator('target').next()
         if self.iteration == 0:
@@ -853,6 +854,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
             if self.iteration % self.snapshot_interval == 0:
+                print("s_img snapshot:{}iteration".format(self.iteration))  # debug
                 s_fmap = self.t_enc(Variable(xp.array([self.s_img])) )
                 s_img_rec = chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data[0] + self.cls.mean).astype(np.uint8)
                 s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
