@@ -667,6 +667,8 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.rec_batch_split = kwargs.pop('rec_batch_split')
             self.rec_alt = not(kwargs.pop('rec_noalt'))#True
             self.rec_adv = not (kwargs.pop('rec_noadv'))
+            self.s_img = kwargs.pop('s_img')
+            self.t_img = kwargs.pop('t_img')
         else:
             self.reconstructor = None
             self.rec_adv = True
@@ -681,8 +683,8 @@ class Adv_updater(chainer.training.StandardUpdater):
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
-        self.s_img = None
-        self.t_img = None
+        # self.s_img = None
+        # self.t_img = None
         # self.coral_batchsize = 16 #hardcoding to be removed
         # self.CORAL_weight = 1 #hardcoding to be removed
 
@@ -759,13 +761,13 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.buf.set_examples(src_fmap_tobuf, tgt_fmap_tobuf)
 
         batch_source = self.get_iterator('main').next()
-        if self.iteration == 0:
-            self.s_img = batch_source[0][0]
+        # if self.iteration == 0:
+        #     self.s_img = batch_source[0][0]
             # print("s_img initialized:{}iteration".format(self.iteration)) #debug
         batch_source_array = convert.concat_examples(batch_source, self.device)
         batch_target = self.get_iterator('target').next()
-        if self.iteration == 0:
-            self.t_img = batch_target[0]
+        # if self.iteration == 0:
+        #     self.t_img = batch_target[0]
         src_fmap = self.t_enc(batch_source_array[0])  # src feature map
         tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
 
@@ -857,12 +859,12 @@ class Adv_updater(chainer.training.StandardUpdater):
             chainer.reporter.report({'loss_rec': loss_rec_sum})
             if self.iteration % self.snapshot_interval == 0:
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
-                s_fmap = self.t_enc(Variable(xp.array([self.s_img])) )
+                s_fmap = self.t_enc(Variable(xp.array([self.s_img-self.cls.mean])) )
                 s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0].astype(np.uint8)
                 s_img_rec = s_img_rec.transpose(1, 2, 0)
                 s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
                 cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration)),s_img_rec)
-                t_fmap = self.t_enc(Variable(xp.array([self.t_img])))
+                t_fmap = self.t_enc(Variable(xp.array([self.t_img-self.cls.mean])))
                 t_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[
                     0].astype(np.uint8)
                 t_img_rec = t_img_rec.transpose(1, 2, 0)

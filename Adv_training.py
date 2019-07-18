@@ -147,6 +147,10 @@ def main():
         updater_args["rec_batch_split"] = args.rec_batch_split
         updater_args["rec_noalt"] = args.rec_noalt
         updater_args["rec_noadv"] = args.rec_noadv
+        s_img = COWC_dataset_processed(split="train", datadir=args.source_dataset)[0][0] #- ssd_model.mean
+        t_img = target_dataset[0] #- ssd_model.mean
+        updater_args["s_img"] = s_img
+        updater_args["t_img"] = t_img
 
     # Set up optimizers
     opts = {}
