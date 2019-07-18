@@ -859,12 +859,12 @@ class Adv_updater(chainer.training.StandardUpdater):
             chainer.reporter.report({'loss_rec': loss_rec_sum})
             if self.iteration % self.snapshot_interval == 0:
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
-                s_fmap = self.t_enc(Variable(xp.array([self.s_img-self.cls.mean])) )
+                s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
                 s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0].astype(np.uint8)
                 s_img_rec = s_img_rec.transpose(1, 2, 0)
                 s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
                 cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration)),s_img_rec)
-                t_fmap = self.t_enc(Variable(xp.array([self.t_img-self.cls.mean])))
+                t_fmap = self.t_enc(Variable(xp.array([(self.t_img-self.cls.mean).astype(np.float32)])))
                 t_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[
                     0].astype(np.uint8)
                 t_img_rec = t_img_rec.transpose(1, 2, 0)
