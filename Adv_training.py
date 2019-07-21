@@ -54,6 +54,7 @@ def main():
     parser.add_argument('--rec_weight', type=float, default=1.)
     parser.add_argument('--rec_file', type=str)
     parser.add_argument('--rec_batch_split', type=int, default=16)
+    parser.add_argument('--rec_loss_func', type=str, choices=["L1", "L2"], default="L1")
     parser.add_argument('--rec_noalt', action="store_true")
     parser.add_argument('--rec_noadv', action="store_true")
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
@@ -145,6 +146,7 @@ def main():
     if args.reconstructor:
         updater_args["rec_weight"] = args.rec_weight
         updater_args["rec_batch_split"] = args.rec_batch_split
+        updater_args["rec_loss_func"] = args.rec_loss_func
         updater_args["rec_noalt"] = args.rec_noalt
         updater_args["rec_noadv"] = args.rec_noadv
         s_img = COWC_dataset_processed(split="train", datadir=args.source_dataset)[0][0] #- ssd_model.mean
