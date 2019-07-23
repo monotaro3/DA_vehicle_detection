@@ -827,6 +827,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             # loss_weight = 0.1
             for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
                 batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
+                split_coef = len(batch_split) / len(batch_target)
                 t_data = Variable(xp.array(batch_split)) #/ 255
                 tgt_fmap = self.t_enc(t_data)
                 for i in range(len(tgt_fmap)-1):
@@ -836,9 +837,10 @@ class Adv_updater(chainer.training.StandardUpdater):
                 # del src_fmap
                 image_rec = self.reconstructor(tgt_fmap[0])
                 if self.rec_loss_func == "L1":
-                    loss_rec = F.mean_absolute_error(image_rec, t_data) * self.rec_weight
+                    loss_rec = F.mean_absolute_error(image_rec, t_data)
                 elif self.rec_loss_func == "L2":
-                    loss_rec = F.mean_squared_error(image_rec, t_data) * self.rec_weight
+                    loss_rec = F.mean_squared_error(image_rec, t_data)
+                loss_rec *= split_coef * self.rec_weight
                 loss_rec.backward()
                 loss_rec.unchain_backward()
                 loss_rec_sum += loss_rec.data
