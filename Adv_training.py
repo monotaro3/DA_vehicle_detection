@@ -57,6 +57,9 @@ def main():
     parser.add_argument('--rec_loss_func', type=str, choices=["L1", "L2"], default="L1")
     parser.add_argument('--rec_noalt', action="store_true")
     parser.add_argument('--rec_noadv', action="store_true")
+    parser.add_argument('--semantic', type=str, choices=["small", "full"],
+                        help='use of semantic loss with reconstructor')
+    parser.add_argument('--sem_weight', type=float, default=1.)
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -77,6 +80,8 @@ def main():
                    'validation/main/PR/car', 'validation/main/FAR/car', 'validation/main/F1/car', 'lr_dis', 'lr_cls']
     if args.reconstructor:
         report_keys += ["loss_rec"]
+        if args.semantic:
+            report_keys += ["loss_sem"]
 
     Discriminator = eval(args.dis_class)
     discriminator = Discriminator()
@@ -149,6 +154,8 @@ def main():
         updater_args["rec_loss_func"] = args.rec_loss_func
         updater_args["rec_noalt"] = args.rec_noalt
         updater_args["rec_noadv"] = args.rec_noadv
+        updater_args["semantic"] = args.semantic
+        updater_args["sem_weight"] = args.sem_weight
         s_img = COWC_dataset_processed(split="train", datadir=args.source_dataset)[0][0] #- ssd_model.mean
         t_img = target_dataset[0] #- ssd_model.mean
         updater_args["s_img"] = s_img

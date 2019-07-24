@@ -668,6 +668,8 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.rec_alt = not(kwargs.pop('rec_noalt'))#True
             self.rec_adv = not (kwargs.pop('rec_noadv'))
             self.rec_loss_func = kwargs.pop('rec_loss_func')
+            self.semantic = kwargs.pop('semantic')
+            self.sem_weight = kwargs.pop('sem_weight')
             self.s_img = kwargs.pop('s_img')
             self.t_img = kwargs.pop('t_img')
         else:
@@ -845,8 +847,40 @@ class Adv_updater(chainer.training.StandardUpdater):
                 loss_rec.unchain_backward()
                 loss_rec_sum += loss_rec.data
                 del loss_rec
+            if self.semantic:
+                loss_sem_sum = 0
+                if self.semantic == "small":
+                    cls_optimizer.update()
+                for b_num in range(-(-len(batch_source_array[0]) // self.rec_batch_split)):
+                    batch_split = batch_source_array[0][self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                    batch_split_loc =  batch_source_array[1][self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                    batch_split_label = batch_source_array[2][
+                                      self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                    split_coef = len(batch_split) / len(batch_source_array[0])
+                    s_data = Variable(batch_split)  # / 255
+                    if self.semantic == "small":
+                        with chainer.no_backprop_mode():
+                            src_fmap = self.t_enc(s_data)
+                    else:
+                        src_fmap = self.t_enc(s_data)
+                    for i in range(len(src_fmap) - 1):
+                        s_map = src_fmap.pop()
+                        s_map.unchain_backward()
+                        del s_map
+                    image_rec = self.reconstructor(src_fmap[0])
+                    src_fmap_ = self.t_enc(image_rec)
+                    mb_locs, mb_confs = self.cls.multibox(src_fmap_)
+                    loc_loss, conf_loss = multibox_loss(
+                        mb_locs, mb_confs, batch_split_loc, batch_split_label, self.k)
+                    cls_loss_ = loc_loss * self.alpha + conf_loss
+                    cls_loss_ *= split_coef * self.sem_weight
+                    cls_loss_.backward()
+                    cls_loss_.unchain_backward()
+                    loss_sem_sum += cls_loss_.data
+                    del cls_loss_
             rec_optimizer.update()
-            cls_optimizer.update()
+            if self.semantic != "small":
+                cls_optimizer.update()
             # loss_rec = loss_rec.data
 
         if not self.reconstructor:
@@ -862,6 +896,8 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
+            if self.semantic:
+                chainer.reporter.report({'loss_sem': loss_sem_sum})
             if self.iteration % self.snapshot_interval == 0:
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
                 s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
