@@ -670,6 +670,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.rec_loss_func = kwargs.pop('rec_loss_func')
             self.semantic = kwargs.pop('semantic')
             self.sem_weight = kwargs.pop('sem_weight')
+            self.sem_batch_split = kwargs.pop('sem_batch_split')
             self.s_img = kwargs.pop('s_img')
             self.t_img = kwargs.pop('t_img')
         else:
@@ -851,11 +852,11 @@ class Adv_updater(chainer.training.StandardUpdater):
                 loss_sem_sum = 0
                 if self.semantic == "small":
                     cls_optimizer.update()
-                for b_num in range(-(-len(batch_source_array[0]) // self.rec_batch_split)):
-                    batch_split = batch_source_array[0][self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
-                    batch_split_loc =  batch_source_array[1][self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                for b_num in range(-(-len(batch_source_array[0]) // self.sem_batch_split)):
+                    batch_split = batch_source_array[0][self.sem_batch_split * b_num:self.sem_batch_split * (b_num + 1)]
+                    batch_split_loc =  batch_source_array[1][self.sem_batch_split * b_num:self.sem_batch_split * (b_num + 1)]
                     batch_split_label = batch_source_array[2][
-                                      self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                                      self.sem_batch_split * b_num:self.sem_batch_split * (b_num + 1)]
                     split_coef = len(batch_split) / len(batch_source_array[0])
                     s_data = Variable(batch_split)  # / 255
                     if self.semantic == "small":

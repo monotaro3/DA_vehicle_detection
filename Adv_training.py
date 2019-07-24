@@ -60,6 +60,7 @@ def main():
     parser.add_argument('--semantic', type=str, choices=["small", "full"],
                         help='use of semantic loss with reconstructor')
     parser.add_argument('--sem_weight', type=float, default=1.)
+    parser.add_argument('--sem_batch_split', type=int, default=12)
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -156,6 +157,7 @@ def main():
         updater_args["rec_noadv"] = args.rec_noadv
         updater_args["semantic"] = args.semantic
         updater_args["sem_weight"] = args.sem_weight
+        updater_args["sem_batch_split"] = args.sem_batch_split
         s_img = COWC_dataset_processed(split="train", datadir=args.source_dataset)[0][0] #- ssd_model.mean
         t_img = target_dataset[0] #- ssd_model.mean
         updater_args["s_img"] = s_img
