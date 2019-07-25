@@ -165,7 +165,7 @@ def main():
 
     # Set up optimizers
     opts = {}
-    if args.reconstructor and not args.rec_noadv:
+    if not args.reconstructor or not args.rec_noadv:
         opts["opt_dis"] = make_optimizer(discriminator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     opts["opt_cls"] = make_optimizer(ssd_model, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     if args.reconstructor:
