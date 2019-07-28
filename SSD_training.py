@@ -81,13 +81,16 @@ class MultiboxTrainChain(chainer.Chain):
 
 class Transform(object):
 
-    def __init__(self, coder, size, mean):
+    def __init__(self, coder, size, mean,transform=True, original = False):
         # to send cpu, make a copy
         self.coder = copy.copy(coder)
         self.coder.to_cpu()
 
         self.size = size
         self.mean = mean
+
+        self.transform = transform
+        self.original = original
 
     def __call__(self, in_data):
         # There are five data augmentation steps
@@ -97,10 +100,20 @@ class Transform(object):
         # 4. Resizing with random interpolation
         # 5. Random horizontal flipping
 
-        img, bbox, label = in_data
+        if type(in_data) != tuple:
+            img = in_data
+        else:
+            img, bbox, label = in_data
 
+        if self.transform:
+            if self.original:
+                img_original = img.copy()
+                if len(img_original.shape) == 2:
+                    img_original = img_original[:, :, np.newaxis]
+                # img_original = img_original.astype(np.float32).transpose((2, 0, 1))
+                img_original -= self.mean
         # 1. Color augmentation
-        img = random_distort(img)
+            img = random_distort(img)
 
         # # 2. Random expansion
         # if np.random.randint(2):
@@ -118,9 +131,10 @@ class Transform(object):
         # label = label[param['index']]
 
         # 4. Resizing with random interpolatation
-        _, H, W = img.shape
-        img = resize_with_random_interpolation(img, (self.size, self.size))
-        bbox = transforms.resize_bbox(bbox, (H, W), (self.size, self.size))
+            _, H, W = img.shape
+            img = resize_with_random_interpolation(img, (self.size, self.size))
+            if type(in_data) == tuple:
+                bbox = transforms.resize_bbox(bbox, (H, W), (self.size, self.size))
 
         # # 5. Random horizontal flipping
         # img, params = transforms.random_flip(
@@ -130,7 +144,14 @@ class Transform(object):
 
         # Preparation for SSD network
         img -= self.mean
-        mb_loc, mb_label = self.coder.encode(bbox, label)
+        if type(in_data) == tuple:
+            mb_loc, mb_label = self.coder.encode(bbox, label)
+
+        if type(in_data) != tuple:
+            if self.transform and self.original:
+                return img, img_original
+            else:
+                return img
 
         return img, mb_loc, mb_label
 
