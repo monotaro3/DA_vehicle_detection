@@ -710,6 +710,9 @@ class Adv_updater(chainer.training.StandardUpdater):
             with chainer.no_backprop_mode():
                 src_fmap = self.t_enc(batch_source_array[0])  # src feature map
             batch_target = self.get_iterator('target').next()
+            if type(batch_target[0]) == tuple:
+                batch_target_org = [x[1] for x in batch_target]
+                batch_target = [x[0] for x in batch_target]
             batchsize = len(batch_target)
             use_bufsize = int(batchsize/2)
 
@@ -772,6 +775,9 @@ class Adv_updater(chainer.training.StandardUpdater):
             # print("s_img initialized:{}iteration".format(self.iteration)) #debug
         batch_source_array = convert.concat_examples(batch_source, self.device)
         batch_target = self.get_iterator('target').next()
+        if type(batch_target[0]) == tuple:
+            batch_target_org = [x[1] for x in batch_target]
+            batch_target = [x[0] for x in batch_target]
         # if self.iteration == 0:
         #     self.t_img = batch_target[0]
         src_fmap = self.t_enc(batch_source_array[0])  # src feature map
@@ -832,6 +838,9 @@ class Adv_updater(chainer.training.StandardUpdater):
             # loss_weight = 0.1
             for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
                 batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
+                if type(batch_target[0]) == tuple:
+                    batch_split_org = batch_target_org[self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                    t_data_org = Variable(xp.array(batch_split_org))
                 split_coef = len(batch_split) / len(batch_target)
                 t_data = Variable(xp.array(batch_split)) #/ 255
                 tgt_fmap = self.t_enc(t_data)
@@ -841,10 +850,11 @@ class Adv_updater(chainer.training.StandardUpdater):
                     del t_map
                 # del src_fmap
                 image_rec = self.reconstructor(tgt_fmap[0])
+                img_org = t_data_org if type(batch_target[0]) == tuple else t_data
                 if self.rec_loss_func == "L1":
-                    loss_rec = F.mean_absolute_error(image_rec, t_data)
+                    loss_rec = F.mean_absolute_error(image_rec, img_org)
                 elif self.rec_loss_func == "L2":
-                    loss_rec = F.mean_squared_error(image_rec, t_data)
+                    loss_rec = F.mean_squared_error(image_rec, img_org)
                 loss_rec *= split_coef * self.rec_weight
                 loss_rec.backward()
                 loss_rec.unchain_backward()

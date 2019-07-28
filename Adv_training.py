@@ -61,6 +61,8 @@ def main():
                         help='use of semantic loss with reconstructor')
     parser.add_argument('--sem_weight', type=float, default=1.)
     parser.add_argument('--sem_batch_split', type=int, default=12)
+    parser.add_argument('--t_no_aug', action="store_true", help='not perform augmentation to target images')
+    parser.add_argument('--rec_aug', action="store_true", help='reconstruct augmented image, not original one')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -128,7 +130,9 @@ def main():
         source_dataset = TransformDataset(
             COWC_dataset_processed(split="train", datadir=args.source_dataset),
             Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean))
-    target_dataset = Dataset_imgonly(args.target_dataset)
+    target_dataset_ = Dataset_imgonly(args.target_dataset)
+    target_dataset = TransformDataset(target_dataset_,
+            Transform(ssd_model.coder, ssd_model.insize, ssd_model.mean,transform=not(args.t_no_aug),original=not(args.rec_aug)))
 
     train_iter1 = chainer.iterators.MultiprocessIterator(source_dataset, args.batchsize)
     train_iter2 = chainer.iterators.MultiprocessIterator(target_dataset, args.batchsize)
@@ -159,7 +163,7 @@ def main():
         updater_args["sem_weight"] = args.sem_weight
         updater_args["sem_batch_split"] = args.sem_batch_split
         s_img = COWC_dataset_processed(split="train", datadir=args.source_dataset)[0][0] #- ssd_model.mean
-        t_img = target_dataset[0] #- ssd_model.mean
+        t_img = target_dataset_[0] #- ssd_model.mean
         updater_args["s_img"] = s_img
         updater_args["t_img"] = t_img
 
