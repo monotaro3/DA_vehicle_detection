@@ -50,6 +50,7 @@ def main():
     # parser.add_argument('--Alt_update_param', type=int, help='parameters of alternative update', nargs = 3, choices = [0,1])
     # parser.add_argument('--multibatch_times', type=int, help='number of multiplication of batchsize for discriminator learning')
     parser.add_argument('--updater', type=str, help='Updater class name to be used')
+    parser.add_argument('--adv_inv', action="store_true")
     parser.add_argument('--reconstructor', type=str, choices = ["deconv","unpool","unpool_conv"], help='upsampling type of reconstructor')
     parser.add_argument('--rec_weight', type=float, default=1.)
     parser.add_argument('--rec_file', type=str)
@@ -180,6 +181,7 @@ def main():
 
     updater_args["snapshot_interval"] = args.snapshot_interval
     updater_args["outdir"] = args.out
+    updater_args["adv_inv"] = args.adv_inv
 
     # Set up updater and trainer
     updater = Updater(**updater_args)
@@ -220,6 +222,10 @@ def main():
 
     if args.resume:
         serializers.load_npz(args.resume, trainer)
+
+    # serializers.save_npz(os.path.join(args.out, "ssdmodel_iter_12000"), trainer.updater._optimizers["opt_cls"].target)
+    # serializers.save_npz(os.path.join(args.out, "reconstructor_iter_12000"),
+    #                      trainer.updater._optimizers["opt_rec"].target)
 
     # Run the training
     trainer.run()

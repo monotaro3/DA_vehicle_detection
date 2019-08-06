@@ -676,6 +676,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         else:
             self.reconstructor = None
             self.rec_adv = True
+        self.adv_inv = kwargs.pop('adv_inv')
         self.dis, self.cls = models
         self.buf = kwargs.pop('buffer')
         # self.coral_batchsize = kwargs.pop('coral_batchsize')
@@ -786,9 +787,14 @@ class Adv_updater(chainer.training.StandardUpdater):
         self.cls.cleargrads()
 
         if self.rec_adv:
-            y_target_enc = self.dis(tgt_fmap)
-            loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
-            loss_t_enc.backward()
+            if self.adv_inv:
+                y_target_enc = self.dis(src_fmap)
+                loss_t_enc = F.sum(F.softplus(y_target_enc)) / n_fmap_elements / batchsize
+                loss_t_enc.backward()
+            else:
+                y_target_enc = self.dis(tgt_fmap)
+                loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
+                loss_t_enc.backward()
 
         mb_locs, mb_confs = self.cls.multibox(src_fmap)
         loc_loss, conf_loss = multibox_loss(
