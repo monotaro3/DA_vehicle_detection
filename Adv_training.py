@@ -193,6 +193,9 @@ def main():
     trainer.extend(extensions.LogReport(keys=report_keys,
                                         trigger=(args.display_interval, 'iteration')))
 
+    bestshot_dir = os.path.join(args.out,"bestshot")
+    if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
+
     printreport_args = {"entries": report_keys}
     progress_args = {"update_interval": 10}
     if args.out_progress:
@@ -211,9 +214,6 @@ def main():
         trainer.extend(
             extensions.snapshot_object(reconstructor, 'reconstructor_iter_{.updater.iteration}'),
             trigger=(args.max_iter, 'iteration'))
-
-    bestshot_dir = os.path.join(args.out,"bestshot")
-    if not os.path.isdir(bestshot_dir): os.makedirs(bestshot_dir)
 
     trainer.extend(
         ssd_evaluator(
