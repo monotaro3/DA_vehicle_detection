@@ -30,6 +30,15 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
         keys = ['main/cls_loss','main/CORAL_loss_weighted']
     elif mode == "CORAL_eval":
         keys = ['validation_1/main/map','validation_1/main/F1/car']
+    elif mode == "Rec_loss":
+        keys = ["loss_rec"]
+    elif mode == "Rec_loss_cls":
+        keys = ["loss_cls"]
+    elif mode == "Rec_loss_sem":
+        keys = ["loss_sem"]
+    elif mode == "Rec_eval":
+        keys = ["validation/main/map", "validation/main/F1/car"]
+        mode = "DA_eval"
     data = defaultdict(lambda :[[],[]])
     for key in keys:
         for ep in ch_log:
@@ -159,8 +168,12 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
             writer.writerows(write_data)
 
     if not output_csv:
-        #plt.ylim([0.,2])
-        plt.ylim([0.0, 0.9])
+        if mode =="ssd" or mode.find("loss")>-1:
+            plt.ylim([0.,50])
+            # plt.ylim([0., 1.5])
+        elif mode.find("eval")>1:
+            plt.ylim([0.0, 0.9])
+            # plt.xlim([0.0, 6000])
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.subplots_adjust(right=0.6)
         plt.savefig(savepath)
@@ -168,5 +181,9 @@ def gengraph(logfile,savedir="graph",figname = "train_graph.png",mode="SSD",key_
 
 if __name__ == "__main__":
     # gengraph("E:/work/DA_vehicle_detection/model/DA/m_thesis/4_CORAL_x5_nmargin_r1_1/log",savedir='E:/work/DA_vehicle_detection/model/DA/m_thesis/4_CORAL_x5_nmargin_r1_1/graph',figname="train_eval.png",mode="CORAL_eval",output_csv=False) #,key_select=('mean_ap_F1',))
-    gengraph("E:/work/experiments/trained_models/coral_nooverlap_full_coef10/log", savedir='E:/work/experiments/trained_models/coral_nooverlap_full_coef10/graphs',
-             figname="train_eval.png", mode="CORAL_eval",output_csv=False)#,key_select=('validation_1/main/map',))
+    gengraph("E:/work/experiments/trained_models/ssd_rec_adv_inv_sem_full/log", savedir='E:/work/experiments/trained_models/ssd_rec_adv_inv_sem_full/graphs',
+             figname="rec_eval.png", mode="Rec_eval",output_csv=False)#,key_select=('validation_1/main/map',))
+    # gengraph("E:/work/experiments/trained_models/ssd_adv_inv/log",
+    #          savedir='E:/work/experiments/trained_models/ssd_adv_inv/graphs',
+    #          figname="da_eval.png", mode="DA_eval",
+    #          output_csv=False)  # ,key_select=('validation_1/main/map',))
