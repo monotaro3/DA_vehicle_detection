@@ -9,6 +9,7 @@ import chainer.links as L
 import chainer.functions as F
 from chainercv import utils
 from chainer import Variable, link_hooks
+from chainercv.links.model.ssd import Normalize
 # from chainercv.links.model.ssd.multibox_coder import _unravel_index
 
 
@@ -663,6 +664,68 @@ class Recontructor(Chain):
         h = F.relu(self.conv1_1(h))
         h = self.conv0(h)
         return h
+
+class Generator_VGG16_simple(chainer.Chain):
+    def __init__(self):
+        super(Generator_VGG16_simple, self).__init__()
+        with self.init_scope():
+            self.conv1_1 = L.Convolution2D(64, 3, pad=1)
+            self.conv1_2 = L.Convolution2D(64, 3, pad=1)
+
+            self.conv2_1 = L.Convolution2D(128, 3, pad=1)
+            self.conv2_2 = L.Convolution2D(128, 3, pad=1)
+
+            self.conv3_1 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_2 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_3 = L.Convolution2D(256, 3, pad=1)
+
+            self.conv4_1 = L.Convolution2D(512, 3, pad=1)
+            self.conv4_2 = L.Convolution2D(512, 3, pad=1)
+            self.conv4_3 = L.Convolution2D(512, 3, pad=1)
+            self.norm4 = Normalize(512, initial=initializers.Constant(20))
+
+            # self.conv5_1 = L.DilatedConvolution2D(512, 3, pad=1)
+            # self.conv5_2 = L.DilatedConvolution2D(512, 3, pad=1)
+            # self.conv5_3 = L.DilatedConvolution2D(512, 3, pad=1)
+            #
+            # self.conv6 = L.DilatedConvolution2D(1024, 3, pad=6, dilate=6)
+            # self.conv7 = L.Convolution2D(1024, 1)
+
+    def forward(self, x):
+        # ys = []
+
+        h = F.relu(self.conv1_1(x))
+        h = F.relu(self.conv1_2(h))
+        h = F.max_pooling_2d(h, 2)
+
+        h = F.relu(self.conv2_1(h))
+        h = F.relu(self.conv2_2(h))
+        h = F.max_pooling_2d(h, 2)
+
+        h = F.relu(self.conv3_1(h))
+        h = F.relu(self.conv3_2(h))
+        h = F.relu(self.conv3_3(h))
+        h = F.max_pooling_2d(h, 2)
+
+        h = F.relu(self.conv4_1(h))
+        h = F.relu(self.conv4_2(h))
+        h = F.relu(self.conv4_3(h))
+        # ys.append(self.norm4(h))
+
+        return self.norm4(h)
+
+        # h = F.max_pooling_2d(h, 2)
+        #
+        # h = F.relu(self.conv5_1(h))
+        # h = F.relu(self.conv5_2(h))
+        # h = F.relu(self.conv5_3(h))
+        # h = F.max_pooling_2d(h, 3, stride=1, pad=1)
+        #
+        # h = F.relu(self.conv6(h))
+        # h = F.relu(self.conv7(h))
+        # ys.append(h)
+        #
+        # return ys
 
 
 

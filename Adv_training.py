@@ -64,6 +64,8 @@ def main():
     parser.add_argument('--sem_batch_split', type=int, default=12)
     parser.add_argument('--t_no_aug', action="store_true", help='not perform augmentation to target images')
     parser.add_argument('--rec_aug', action="store_true", help='reconstruct augmented image, not original one')
+    parser.add_argument('--generator', type=str, help='class name of generator')
+    parser.add_argument('--gen_file', type=str)
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -167,6 +169,13 @@ def main():
         t_img = target_dataset_[0] #- ssd_model.mean
         updater_args["s_img"] = s_img
         updater_args["t_img"] = t_img
+        if args.generator:
+            generator = eval(args.generator)()
+            if args.gen_file:
+                serializers.load_npz(args.gen_file, generator)
+            updater_args["generator"] = generator
+        else:
+            updater_args["generator"] = None
 
     # Set up optimizers
     opts = {}
@@ -175,6 +184,8 @@ def main():
     opts["opt_cls"] = make_optimizer(ssd_model, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     if args.reconstructor:
         opts["opt_rec"] = make_optimizer(reconstructor, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+        if args.generator:
+            opts["opt_gen"] = make_optimizer(generator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
 
     updater_args["optimizer"] = opts
     updater_args["models"] = models
@@ -214,6 +225,10 @@ def main():
         trainer.extend(
             extensions.snapshot_object(reconstructor, 'reconstructor_iter_{.updater.iteration}'),
             trigger=(args.max_iter, 'iteration'))
+        if args.generator:
+            trainer.extend(
+                extensions.snapshot_object(generator, 'generator_iter_{.updater.iteration}'),
+                trigger=(args.max_iter, 'iteration'))
 
     trainer.extend(
         ssd_evaluator(

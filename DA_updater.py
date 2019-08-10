@@ -673,6 +673,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.sem_batch_split = kwargs.pop('sem_batch_split')
             self.s_img = kwargs.pop('s_img')
             self.t_img = kwargs.pop('t_img')
+            self.generator = kwargs.pop('generator')
         else:
             self.reconstructor = None
             self.rec_adv = True
@@ -693,12 +694,21 @@ class Adv_updater(chainer.training.StandardUpdater):
         # self.coral_batchsize = 16 #hardcoding to be removed
         # self.CORAL_weight = 1 #hardcoding to be removed
 
+    def _postprocess(self,img):
+        img[img < 0] = 0
+        img[img > 255] = 255
+        img = img.transpose(1, 2, 0).astype(np.uint8)
+        img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+        return img
+
     def update_core(self):
         if self.rec_adv:
             dis_optimizer = self.get_optimizer('opt_dis')
         cls_optimizer = self.get_optimizer('opt_cls')
         if self.reconstructor:
             rec_optimizer = self.get_optimizer('opt_rec')
+            if self.generator:
+                gen_optimizer = self.get_optimizer('opt_gen')
             # if self.iteration == 0:
             #     print("reconstructor active") #debug code
         xp = self.cls.xp
@@ -839,6 +849,8 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             self.reconstructor.cleargrads()
+            if self.generator:
+                self.generator.cleargrads()
             # self.rec_batch_split = 16
             loss_rec_sum = 0
             # loss_weight = 0.1
@@ -855,6 +867,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                     t_map.unchain_backward()
                     del t_map
                 # del src_fmap
+                if self.generator:
+                    tgt_fmap[0] += self.generator(t_data)
                 image_rec = self.reconstructor(tgt_fmap[0])
                 img_org = t_data_org if type(batch_target[0]) == tuple else t_data
                 if self.rec_loss_func == "L1":
@@ -886,6 +900,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                         s_map = src_fmap.pop()
                         s_map.unchain_backward()
                         del s_map
+                    if self.generator:
+                        src_fmap[0] += self.generator(s_data)
                     image_rec = self.reconstructor(src_fmap[0])
                     src_fmap_ = self.t_enc(image_rec)
                     mb_locs, mb_confs = self.cls.multibox(src_fmap_)
@@ -898,6 +914,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                     loss_sem_sum += cls_loss_.data
                     del cls_loss_
             rec_optimizer.update()
+            if self.generator:
+                gen_optimizer.update()
             if self.semantic != "small":
                 cls_optimizer.update()
             # loss_rec = loss_rec.data
@@ -917,23 +935,64 @@ class Adv_updater(chainer.training.StandardUpdater):
             chainer.reporter.report({'loss_rec': loss_rec_sum})
             if self.semantic:
                 chainer.reporter.report({'loss_sem': loss_sem_sum})
-            if self.iteration % self.snapshot_interval == 0:
+            if self.iteration == 0 or (self.iteration + 1) % self.snapshot_interval == 0:
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
-                s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
-                s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
-                s_img_rec[s_img_rec < 0] = 0
-                s_img_rec[s_img_rec > 255] = 255
-                s_img_rec = s_img_rec.transpose(1, 2, 0).astype(np.uint8)
-                s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
-                cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration)),s_img_rec)
-                t_fmap = self.t_enc(Variable(xp.array([(self.t_img-self.cls.mean).astype(np.float32)])))
-                t_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[
-                    0]
-                t_img_rec[t_img_rec < 0] = 0
-                t_img_rec[t_img_rec > 255] = 255
-                t_img_rec = t_img_rec.transpose(1, 2, 0).astype(np.uint8)
-                t_img_rec = cv.cvtColor(t_img_rec, cv.COLOR_RGB2BGR)
-                cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration)), t_img_rec)
+                s_original = (self.s_img-self.cls.mean).astype(np.float32)
+                t_original = (self.t_img-self.cls.mean).astype(np.float32)
+                with chainer.no_backprop_mode():
+                    s_fmap = self.t_enc(Variable(xp.array([s_original])))
+                    if self.generator:
+                        delta = self.generator(s_original)
+                    else:
+                        delta = 0
+                    s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]+delta).data) + self.cls.mean)[0]
+                    s_img_rec = self._postprocess(s_img_rec)
+                    cv.imwrite(os.path.join(self.outdir, "s_img_rec_iter{}.jpg".format(self.iteration + 1)), s_img_rec)
+                    if self.generator:
+                        s_img_rec_sem = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
+                        s_img_rec_delta = (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
+                        s_img_rec_sem = self._postprocess(s_img_rec_sem)
+                        s_img_rec_delta = self._postprocess(s_img_rec_delta)
+                        cv.imwrite(os.path.join(self.outdir, "s_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
+                                   s_img_rec_sem)
+                        cv.imwrite(os.path.join(self.outdir, "s_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
+                                   s_img_rec_delta)
+
+                    t_fmap = self.t_enc(Variable(xp.array([t_original])))
+                    if self.generator:
+                        delta = self.generator(t_original)
+                    else:
+                        delta = 0
+                    t_img_rec = \
+                    (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0] + delta).data) + self.cls.mean)[0]
+                    t_img_rec = self._postprocess(t_img_rec)
+                    cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration + 1)), t_img_rec)
+                    if self.generator:
+                        t_img_rec_sem = \
+                        (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
+                        t_img_rec_delta = \
+                        (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
+                        t_img_rec_sem = self._postprocess(t_img_rec_sem)
+                        t_img_rec_delta = self._postprocess(t_img_rec_delta)
+                        cv.imwrite(os.path.join(self.outdir, "t_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
+                                   t_img_rec_sem)
+                        cv.imwrite(os.path.join(self.outdir, "t_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
+                                   t_img_rec_delta)
+                # s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
+                # s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
+                # s_img_rec[s_img_rec < 0] = 0
+                # s_img_rec[s_img_rec > 255] = 255
+                # s_img_rec = s_img_rec.transpose(1, 2, 0).astype(np.uint8)
+                # s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
+                # cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration + 1)),s_img_rec)
+                # t_fmap = self.t_enc(Variable(xp.array([(self.t_img-self.cls.mean).astype(np.float32)])))
+                # t_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[
+                #     0]
+                # t_img_rec[t_img_rec < 0] = 0
+                # t_img_rec[t_img_rec > 255] = 255
+                # t_img_rec = t_img_rec.transpose(1, 2, 0).astype(np.uint8)
+                # t_img_rec = cv.cvtColor(t_img_rec, cv.COLOR_RGB2BGR)
+                # cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration + 1)), t_img_rec)
 
     def serialize(self, serializer):
         super().serialize(serializer)
