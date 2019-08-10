@@ -942,7 +942,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                 with chainer.no_backprop_mode():
                     s_fmap = self.t_enc(Variable(xp.array([s_original])))
                     if self.generator:
-                        delta = self.generator(s_original)
+                        delta = self.generator(Variable(xp.array([s_original])))
                     else:
                         delta = 0
                     s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]+delta).data) + self.cls.mean)[0]
@@ -960,7 +960,7 @@ class Adv_updater(chainer.training.StandardUpdater):
 
                     t_fmap = self.t_enc(Variable(xp.array([t_original])))
                     if self.generator:
-                        delta = self.generator(t_original)
+                        delta = self.generator(Variable(xp.array([t_original])))
                     else:
                         delta = 0
                     t_img_rec = \
