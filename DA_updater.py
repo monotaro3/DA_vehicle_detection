@@ -968,7 +968,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     #     delta = 0
                     s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
                     if self.generator:
-                        s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original]))))).data[0]
+                        s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original])))).data)[0]
                         s_img_rec_aug = self._postprocess(s_img_rec_aug)
                         cv.imwrite(os.path.join(self.outdir, "s_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
                                    s_img_rec_aug)
@@ -992,7 +992,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     t_img_rec = \
                     (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
                     if self.generator:
-                        t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original]))))).data[0]
+                        t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original])))).data)[0]
                         t_img_rec_aug = self._postprocess(t_img_rec_aug)
                         cv.imwrite(os.path.join(self.outdir, "t_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
                                    t_img_rec_aug)
