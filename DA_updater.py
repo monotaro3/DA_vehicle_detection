@@ -849,10 +849,11 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             self.reconstructor.cleargrads()
+            loss_rec_sum = 0
             if self.generator:
                 self.generator.cleargrads()
+                loss_rec_aug_sum = 0
             # self.rec_batch_split = 16
-            loss_rec_sum = 0
             # loss_weight = 0.1
             for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
                 batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
@@ -867,8 +868,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                     t_map.unchain_backward()
                     del t_map
                 # del src_fmap
-                if self.generator:
-                    tgt_fmap[0] += self.generator(t_data)
+                # if self.generator:
+                #     tgt_fmap[0] += self.generator(t_data)
                 image_rec = self.reconstructor(tgt_fmap[0])
                 img_org = t_data_org if type(batch_target[0]) == tuple else t_data
                 if self.rec_loss_func == "L1":
@@ -877,9 +878,20 @@ class Adv_updater(chainer.training.StandardUpdater):
                     loss_rec = F.mean_squared_error(image_rec, img_org)
                 loss_rec *= split_coef * self.rec_weight
                 loss_rec.backward()
+                if self.generator:
+                    tgt_delta = self.generator(t_data)
+                    image_rec_delta = self.reconstructor(tgt_delta)
+                    loss_rec_aug = F.mean_absolute_error(image_rec+image_rec_delta, img_org)
+                    loss_rec_aug *= split_coef * self.rec_weight
+                    loss_rec_aug.backward()
                 loss_rec.unchain_backward()
                 loss_rec_sum += loss_rec.data
                 del loss_rec
+                if self.generator:
+                    loss_rec_aug.unchain_backward()
+                    loss_rec_aug_sum += loss_rec_aug.data
+                    del loss_rec_aug
+
             if self.semantic:
                 loss_sem_sum = 0
                 if self.semantic == "small":
@@ -900,9 +912,11 @@ class Adv_updater(chainer.training.StandardUpdater):
                         s_map = src_fmap.pop()
                         s_map.unchain_backward()
                         del s_map
-                    if self.generator:
-                        src_fmap[0] += self.generator(s_data)
+                    # if self.generator:
+                    #     src_fmap[0] += self.generator(s_data)
                     image_rec = self.reconstructor(src_fmap[0])
+                    if self.generator:
+                        image_rec += self.reconstructor(self.generator(s_data))
                     src_fmap_ = self.t_enc(image_rec)
                     mb_locs, mb_confs = self.cls.multibox(src_fmap_)
                     loc_loss, conf_loss = multibox_loss(
@@ -933,51 +947,68 @@ class Adv_updater(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
+            if self.generator:
+                chainer.reporter.report({'loss_rec_aug': loss_rec_aug_sum})
             if self.semantic:
                 chainer.reporter.report({'loss_sem': loss_sem_sum})
             if self.iteration == 0 or (self.iteration + 1) % self.snapshot_interval == 0:
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
                 s_original = (self.s_img-self.cls.mean).astype(np.float32)
                 t_original = (self.t_img-self.cls.mean).astype(np.float32)
+                if self.iteration == 0:
+                    _s_original = self._postprocess(self.s_img.copy())
+                    _t_original = self._postprocess(self.t_img.copy())
+                    cv.imwrite(os.path.join(self.outdir, "s_img_original.jpg"), _s_original)
+                    cv.imwrite(os.path.join(self.outdir, "t_img_original.jpg"), _t_original)
                 with chainer.no_backprop_mode():
                     s_fmap = self.t_enc(Variable(xp.array([s_original])))
+                    # if self.generator:
+                    #     delta = self.generator(Variable(xp.array([s_original])))
+                    # else:
+                    #     delta = 0
+                    s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
                     if self.generator:
-                        delta = self.generator(Variable(xp.array([s_original])))
-                    else:
-                        delta = 0
-                    s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]+delta).data) + self.cls.mean)[0]
+                        s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original]))))).data[0]
+                        s_img_rec_aug = self._postprocess(s_img_rec_aug)
+                        cv.imwrite(os.path.join(self.outdir, "s_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
+                                   s_img_rec_aug)
                     s_img_rec = self._postprocess(s_img_rec)
                     cv.imwrite(os.path.join(self.outdir, "s_img_rec_iter{}.jpg".format(self.iteration + 1)), s_img_rec)
-                    if self.generator:
-                        s_img_rec_sem = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
-                        s_img_rec_delta = (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
-                        s_img_rec_sem = self._postprocess(s_img_rec_sem)
-                        s_img_rec_delta = self._postprocess(s_img_rec_delta)
-                        cv.imwrite(os.path.join(self.outdir, "s_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
-                                   s_img_rec_sem)
-                        cv.imwrite(os.path.join(self.outdir, "s_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
-                                   s_img_rec_delta)
+                    # if self.generator:
+                    #     s_img_rec_sem = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
+                    #     s_img_rec_delta = (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
+                    #     s_img_rec_sem = self._postprocess(s_img_rec_sem)
+                    #     s_img_rec_delta = self._postprocess(s_img_rec_delta)
+                    #     cv.imwrite(os.path.join(self.outdir, "s_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
+                    #                s_img_rec_sem)
+                    #     cv.imwrite(os.path.join(self.outdir, "s_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
+                    #                s_img_rec_delta)
 
                     t_fmap = self.t_enc(Variable(xp.array([t_original])))
-                    if self.generator:
-                        delta = self.generator(Variable(xp.array([t_original])))
-                    else:
-                        delta = 0
+                    # if self.generator:
+                    #     delta = self.generator(Variable(xp.array([t_original])))
+                    # else:
+                    #     delta = 0
                     t_img_rec = \
-                    (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0] + delta).data) + self.cls.mean)[0]
+                    (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
+                    if self.generator:
+                        t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original]))))).data[0]
+                        t_img_rec_aug = self._postprocess(t_img_rec_aug)
+                        cv.imwrite(os.path.join(self.outdir, "t_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
+                                   t_img_rec_aug)
                     t_img_rec = self._postprocess(t_img_rec)
                     cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration + 1)), t_img_rec)
-                    if self.generator:
-                        t_img_rec_sem = \
-                        (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
-                        t_img_rec_delta = \
-                        (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
-                        t_img_rec_sem = self._postprocess(t_img_rec_sem)
-                        t_img_rec_delta = self._postprocess(t_img_rec_delta)
-                        cv.imwrite(os.path.join(self.outdir, "t_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
-                                   t_img_rec_sem)
-                        cv.imwrite(os.path.join(self.outdir, "t_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
-                                   t_img_rec_delta)
+                    # if self.generator:
+                    #     t_img_rec_sem = \
+                    #     (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
+                    #     t_img_rec_delta = \
+                    #     (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
+                    #     t_img_rec_sem = self._postprocess(t_img_rec_sem)
+                    #     t_img_rec_delta = self._postprocess(t_img_rec_delta)
+                    #     cv.imwrite(os.path.join(self.outdir, "t_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
+                    #                t_img_rec_sem)
+                    #     cv.imwrite(os.path.join(self.outdir, "t_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
+                    #                t_img_rec_delta)
                 # s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
                 # s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
                 # s_img_rec[s_img_rec < 0] = 0

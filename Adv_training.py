@@ -86,6 +86,8 @@ def main():
                    'validation/main/PR/car', 'validation/main/FAR/car', 'validation/main/F1/car', 'lr_dis', 'lr_cls']
     if args.reconstructor:
         report_keys += ["loss_rec"]
+        if args.generator:
+            report_keys += ["loss_rec_aug"]
         if args.semantic:
             report_keys += ["loss_sem"]
 
