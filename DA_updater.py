@@ -855,6 +855,10 @@ class Adv_updater(chainer.training.StandardUpdater):
             if self.generator:
                 self.generator.cleargrads()
                 loss_rec_aug_sum = 0
+                if self.gen_type == "inject":
+                    rec_temp = self.reconstructor.__class__(self.reconstructor["upsample"]).to_gpu()
+                    rec_temp.copyparams(self.reconstructor)
+                    rec_temp.cleargrads()
             # self.rec_batch_split = 16
             # loss_weight = 0.1
             for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
@@ -890,9 +894,6 @@ class Adv_updater(chainer.training.StandardUpdater):
                         loss_rec_aug.backward()
                     elif self.gen_type == "inject":
                         image_rec.unchain_backward()
-                        rec_temp = self.reconstructor.__class__(self.reconstructor["upsample"]).to_gpu()
-                        rec_temp.copyparams(self.reconstructor)
-                        rec_temp.cleargrads()
                         tgt_fmap[0] += self.generator(t_data)
                         image_rec = rec_temp(tgt_fmap[0])
                         loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
