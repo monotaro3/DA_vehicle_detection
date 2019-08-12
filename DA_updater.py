@@ -890,7 +890,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                         loss_rec_aug.backward()
                     elif self.gen_type == "inject":
                         image_rec.unchain_backward()
-                        rec_temp = self.reconstructor.__class__().to_gpu()
+                        rec_temp = self.reconstructor.__class__(self.reconstructor["upsample"]).to_gpu()
                         rec_temp.copyparams(self.reconstructor)
                         rec_temp.cleargrads()
                         tgt_fmap[0] += self.generator(t_data)
