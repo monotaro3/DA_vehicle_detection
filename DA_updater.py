@@ -855,7 +855,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             if self.generator:
                 self.generator.cleargrads()
                 loss_rec_aug_sum = 0
-                if self.gen_type == "inject":
+                if self.gen_type == "inject_freeze":
                     rec_temp = self.reconstructor.__class__(self.reconstructor["upsample"]).to_gpu()
                     rec_temp.copyparams(self.reconstructor)
                     rec_temp.cleargrads()
@@ -892,10 +892,17 @@ class Adv_updater(chainer.training.StandardUpdater):
                         loss_rec_aug = F.mean_absolute_error(image_rec+image_rec_delta, img_org)
                         loss_rec_aug *= split_coef * self.rec_weight
                         loss_rec_aug.backward()
-                    elif self.gen_type == "inject":
+                    elif self.gen_type == "inject_freeze":
                         image_rec.unchain_backward()
                         tgt_fmap[0] += self.generator(t_data)
                         image_rec = rec_temp(tgt_fmap[0])
+                        loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
+                        loss_rec_aug *= split_coef * self.rec_weight
+                        loss_rec_aug.backward()
+                    elif self.gen_type == "inject":
+                        # image_rec.unchain_backward()
+                        tgt_fmap[0] += self.generator(t_data)
+                        image_rec = self.reconstructor(tgt_fmap[0])
                         loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
                         loss_rec_aug *= split_coef * self.rec_weight
                         loss_rec_aug.backward()
@@ -928,7 +935,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                         s_map.unchain_backward()
                         del s_map
                     if self.generator:
-                        if self.gen_type == "inject":
+                        if self.gen_type.find("inject") > -1:
                             src_fmap[0] += self.generator(s_data)
                         image_rec = self.reconstructor(src_fmap[0])
                     # if self.generator:
@@ -987,7 +994,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     if self.generator:
                         if self.gen_type == "separate":
                             s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original])))).data)[0]
-                        elif self.gen_type == "inject":
+                        elif self.gen_type.find("inject") > -1:
                             s_fmap_delta = self.generator(Variable(xp.array([s_original])))
                             s_img_rec_aug = \
                             (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]+s_fmap_delta).data) + self.cls.mean)[0]
@@ -1016,7 +1023,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     if self.generator:
                         if self.gen_type == "separate":
                             t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original])))).data)[0]
-                        elif self.gen_type == "inject":
+                        elif self.gen_type.find("inject") > -1:
                             t_fmap_delta = self.generator(Variable(xp.array([t_original])))
                             t_img_rec_aug = \
                             (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]+t_fmap_delta).data) + self.cls.mean)[0]

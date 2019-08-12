@@ -66,7 +66,7 @@ def main():
     parser.add_argument('--rec_aug', action="store_true", help='reconstruct augmented image, not original one')
     parser.add_argument('--generator', type=str, help='class name of generator')
     parser.add_argument('--gen_file', type=str)
-    parser.add_argument('--gen_type', type=str, choices=["separate","inject"],default="separate")
+    parser.add_argument('--gen_type', type=str, choices=["separate","inject","inject_freeze"],default="separate")
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
