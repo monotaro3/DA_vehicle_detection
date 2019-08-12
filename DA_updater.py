@@ -674,6 +674,8 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.s_img = kwargs.pop('s_img')
             self.t_img = kwargs.pop('t_img')
             self.generator = kwargs.pop('generator')
+            if self.generator:
+                self.gen_type = kwargs.pop('gen_type')
         else:
             self.reconstructor = None
             self.rec_adv = True
@@ -879,11 +881,23 @@ class Adv_updater(chainer.training.StandardUpdater):
                 loss_rec *= split_coef * self.rec_weight
                 loss_rec.backward()
                 if self.generator:
-                    tgt_delta = self.generator(t_data)
-                    image_rec_delta = self.reconstructor(tgt_delta)
-                    loss_rec_aug = F.mean_absolute_error(image_rec+image_rec_delta, img_org)
-                    loss_rec_aug *= split_coef * self.rec_weight
-                    loss_rec_aug.backward()
+                    if self.gen_type == "separate":
+                        image_rec.unchain_backward()
+                        tgt_delta = self.generator(t_data)
+                        image_rec_delta = self.reconstructor(tgt_delta)
+                        loss_rec_aug = F.mean_absolute_error(image_rec+image_rec_delta, img_org)
+                        loss_rec_aug *= split_coef * self.rec_weight
+                        loss_rec_aug.backward()
+                    elif self.gen_type == "inject":
+                        image_rec.unchain_backward()
+                        rec_temp = self.reconstructor.__class__().to_gpu()
+                        rec_temp.copyparams(self.reconstructor)
+                        rec_temp.cleargrads()
+                        tgt_fmap[0] += self.generator(t_data)
+                        image_rec = rec_temp(tgt_fmap[0])
+                        loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
+                        loss_rec_aug *= split_coef * self.rec_weight
+                        loss_rec_aug.backward()
                 loss_rec.unchain_backward()
                 loss_rec_sum += loss_rec.data
                 del loss_rec
@@ -912,11 +926,13 @@ class Adv_updater(chainer.training.StandardUpdater):
                         s_map = src_fmap.pop()
                         s_map.unchain_backward()
                         del s_map
-                    # if self.generator:
-                    #     src_fmap[0] += self.generator(s_data)
-                    image_rec = self.reconstructor(src_fmap[0])
                     if self.generator:
-                        image_rec += self.reconstructor(self.generator(s_data))
+                        if self.gen_type == "inject":
+                            src_fmap[0] += self.generator(s_data)
+                        image_rec = self.reconstructor(src_fmap[0])
+                    # if self.generator:
+                        if self.gen_type == "separate":
+                            image_rec += self.reconstructor(self.generator(s_data))
                     src_fmap_ = self.t_enc(image_rec)
                     mb_locs, mb_confs = self.cls.multibox(src_fmap_)
                     loc_loss, conf_loss = multibox_loss(
@@ -968,7 +984,12 @@ class Adv_updater(chainer.training.StandardUpdater):
                     #     delta = 0
                     s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
                     if self.generator:
-                        s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original])))).data)[0]
+                        if self.gen_type == "separate":
+                            s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original])))).data)[0]
+                        elif self.gen_type == "inject":
+                            s_fmap_delta = self.generator(Variable(xp.array([s_original])))
+                            s_img_rec_aug = \
+                            (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]+s_fmap_delta).data) + self.cls.mean)[0]
                         s_img_rec_aug = self._postprocess(s_img_rec_aug)
                         cv.imwrite(os.path.join(self.outdir, "s_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
                                    s_img_rec_aug)
@@ -992,7 +1013,12 @@ class Adv_updater(chainer.training.StandardUpdater):
                     t_img_rec = \
                     (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
                     if self.generator:
-                        t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original])))).data)[0]
+                        if self.gen_type == "separate":
+                            t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original])))).data)[0]
+                        elif self.gen_type == "inject":
+                            t_fmap_delta = self.generator(Variable(xp.array([t_original])))
+                            t_img_rec_aug = \
+                            (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]+t_fmap_delta).data) + self.cls.mean)[0]
                         t_img_rec_aug = self._postprocess(t_img_rec_aug)
                         cv.imwrite(os.path.join(self.outdir, "t_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
                                    t_img_rec_aug)
