@@ -67,6 +67,10 @@ def main():
     parser.add_argument('--generator', type=str, help='class name of generator')
     parser.add_argument('--gen_file', type=str)
     parser.add_argument('--gen_type', type=str, choices=["separate","inject","inject_freeze"],default="separate")
+    parser.add_argument('--coGAN', action="store_true", help='activate coGAN mode')
+    parser.add_argument('--disable_t_rec', action="store_true", help='disable learning of reconstructor in target domain')
+    parser.add_argument('--disable_t_gen', action="store_true",
+                        help='disable learning of generator in target domain')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -172,14 +176,17 @@ def main():
         t_img = target_dataset_[0] #- ssd_model.mean
         updater_args["s_img"] = s_img
         updater_args["t_img"] = t_img
-        if args.generator:
-            generator = eval(args.generator)()
-            if args.gen_file:
-                serializers.load_npz(args.gen_file, generator)
-            updater_args["generator"] = generator
-            updater_args["gen_type"] = args.gen_type
-        else:
-            updater_args["generator"] = None
+        updater_args["t_rec_learn"] = not(args.disable_t_rec)
+    if args.generator:
+        generator = eval(args.generator)()
+        if args.gen_file:
+            serializers.load_npz(args.gen_file, generator)
+        updater_args["generator"] = generator
+        updater_args["gen_type"] = args.gen_type
+        updater_args["coGAN"] = args.coGAN
+        updater_args["t_gen_learn"] = not (args.disable_t_gen)
+    else:
+        updater_args["generator"] = None
 
     # Set up optimizers
     opts = {}

@@ -657,7 +657,7 @@ class DA_updater1_buf_2(chainer.training.StandardUpdater):
         #         tgt_fmap[i] = chainer.cuda.to_cpu(tgt_fmap[i].data)
         # self.buf.set_examples(src_fmap,tgt_fmap)
 
-class Adv_updater(chainer.training.StandardUpdater):
+class Adv_updater_(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         models = kwargs.pop('models')
         from SSD_for_vehicle_detection import Recontructor
@@ -687,7 +687,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         self.gpu_num = kwargs["device"]
         self.snapshot_interval = kwargs.pop('snapshot_interval')
         self.outdir = kwargs.pop('outdir')
-        super(Adv_updater, self).__init__(*args, **kwargs)
+        super(Adv_updater_, self).__init__(*args, **kwargs)
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
@@ -1066,7 +1066,7 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.s_img = serializer('s_img', self.s_img)
             self.t_img = serializer('t_img', self.t_img)
 
-class Adv_updater_(chainer.training.StandardUpdater):
+class Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         models = kwargs.pop('models')
         from SSD_for_vehicle_detection import Recontructor
@@ -1082,10 +1082,16 @@ class Adv_updater_(chainer.training.StandardUpdater):
             self.sem_batch_split = kwargs.pop('sem_batch_split')
             self.s_img = kwargs.pop('s_img')
             self.t_img = kwargs.pop('t_img')
+            self.t_rec_learn = kwargs.pop('t_rec_learn')
         else:
             self.reconstructor = None
             self.rec_adv = True
-        self.adv_batch_split = kwargs.pop('adv_batch_split')
+        self.generator = kwargs.pop('generator')
+        if self.generator:
+            self.gen_type = kwargs.pop('gen_type')
+            self.coGAN = kwargs.pop('coGAN')
+            self.t_gen_learn = kwargs.pop('t_gen_learn')
+        self.adv_inv = kwargs.pop('adv_inv')
         self.dis, self.cls = models
         self.buf = kwargs.pop('buffer')
         # self.coral_batchsize = kwargs.pop('coral_batchsize')
@@ -1093,7 +1099,7 @@ class Adv_updater_(chainer.training.StandardUpdater):
         self.gpu_num = kwargs["device"]
         self.snapshot_interval = kwargs.pop('snapshot_interval')
         self.outdir = kwargs.pop('outdir')
-        super(Adv_updater_, self).__init__(*args, **kwargs)
+        super(Adv_updater, self).__init__(*args, **kwargs)
         self.t_enc = self.cls.extractor
         self.alpha = 1
         self.k = 3
@@ -1102,12 +1108,21 @@ class Adv_updater_(chainer.training.StandardUpdater):
         # self.coral_batchsize = 16 #hardcoding to be removed
         # self.CORAL_weight = 1 #hardcoding to be removed
 
+    def _postprocess(self,img):
+        img[img < 0] = 0
+        img[img > 255] = 255
+        img = img.transpose(1, 2, 0).astype(np.uint8)
+        img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+        return img
+
     def update_core(self):
         if self.rec_adv:
             dis_optimizer = self.get_optimizer('opt_dis')
         cls_optimizer = self.get_optimizer('opt_cls')
         if self.reconstructor:
             rec_optimizer = self.get_optimizer('opt_rec')
+            if self.generator:
+                gen_optimizer = self.get_optimizer('opt_gen')
             # if self.iteration == 0:
             #     print("reconstructor active") #debug code
         xp = self.cls.xp
@@ -1117,90 +1132,66 @@ class Adv_updater_(chainer.training.StandardUpdater):
 
             batch_source = self.get_iterator('main').next()
             batch_source_array = convert.concat_examples(batch_source,self.device)
-            # src_fmap = self.t_enc(batch_source_array[0])  # src feature map
+            with chainer.no_backprop_mode():
+                src_fmap = self.t_enc(batch_source_array[0])  # src feature map
             batch_target = self.get_iterator('target').next()
-            batchsize_l = len(batch_target)
-            use_bufsize_l = int(batchsize_l/2)
-            buf_batch_split = int(use_bufsize_l * (self.adv_batch_split/batchsize_l))
+            if type(batch_target[0]) == tuple:
+                batch_target_org = [x[1] for x in batch_target]
+                batch_target = [x[0] for x in batch_target]
+            batchsize = len(batch_target)
+            use_bufsize = int(batchsize/2)
 
-            size_l = 0
-            if batchsize_l >= 2:
-                size_l, e_buf_src , e_buf_tgt = self.buf.get_examples(use_bufsize_l)
+            size = 0
+            if batchsize >= 2:
+                size, e_buf_src , e_buf_tgt = self.buf.get_examples(use_bufsize)
+
+            if size != 0:
+                src_fmap_dis = []
+                for i in range(len(src_fmap)):
+                    src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.gpu_num), Variable(func_bGPU(e_buf_src[i])))))
+                    src_fmap_dis[i].unchain_backward()
+            else:
+                src_fmap_dis = []
+                for i in range(len(src_fmap)):
+                    src_fmap_dis.append(F.copy(src_fmap[i],self.gpu_num))
+                    src_fmap_dis[i].unchain_backward()
+
+            y_source = self.dis(src_fmap_dis)
+
+            with chainer.no_backprop_mode():
+                tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
+            tgt_fmap_dis = []
+            for i in range(len(tgt_fmap)):
+                tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
+                tgt_fmap_dis[i].unchain_backward()
+                if size > 0:
+                    tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i]))])
+
+            y_target = self.dis(tgt_fmap_dis)
+
+            n_fmap_elements = y_target.shape[2]*y_target.shape[3]
+
+            loss_dis_src = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
+            loss_dis_tgt =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
+            loss_dis = loss_dis_src + loss_dis_tgt
 
             self.dis.cleargrads()
-            loss_dis = 0
-            loss_dis_src = 0
-            loss_dis_tgt = 0
+            loss_dis.backward()
+            dis_optimizer.update()
+
+            loss_dis.unchain_backward()
+            loss_dis = loss_dis.data
+            loss_dis_src = loss_dis_src.data
+            loss_dis_tgt = loss_dis_tgt.data
+            del src_fmap_dis
+            del tgt_fmap_dis
+
+            #save fmap to buffer
             src_fmap_tobuf = []
             tgt_fmap_tobuf = []
-
-            for b_num in range(-(-len(batch_target) // self.adv_batch_split)):
-                batch_s_a_split = batch_source_array[0][self.adv_batch_split*b_num:self.adv_batch_split*(b_num+1)]
-                src_fmap = self.t_enc(batch_s_a_split)
-                batchsize = len(batch_s_a_split)
-                if size_l >0:
-                    buf_split_0 = e_buf_src[0][buf_batch_split*b_num:buf_batch_split*(b_num+1)]
-                    size = len(buf_split_0)
-                else:
-                    size = 0
-                # size = int(size_l * (batchsize / batchsize_l))
-
-                if size != 0:
-                    src_fmap_dis = []
-                    for i in range(len(src_fmap)):
-                        src_fmap_dis.append(F.vstack((F.copy(src_fmap[i][0:batchsize - size],self.gpu_num), Variable(func_bGPU(e_buf_src[i][buf_batch_split*b_num:buf_batch_split*(b_num+1)])))))
-                        src_fmap_dis[i].unchain_backward()
-                else:
-                    src_fmap_dis = []
-                    for i in range(len(src_fmap)):
-                        src_fmap_dis.append(F.copy(src_fmap[i],self.gpu_num))
-                        src_fmap_dis[i].unchain_backward()
-
-                y_source = self.dis(src_fmap_dis)
-
-                batch_t_split = batch_target[self.adv_batch_split * b_num:self.adv_batch_split * (b_num + 1)]
-
-                tgt_fmap = self.t_enc(Variable(xp.array(batch_t_split)))
-                tgt_fmap_dis = []
-                for i in range(len(tgt_fmap)):
-                    tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
-                    tgt_fmap_dis[i].unchain_backward()
-                    if size > 0:
-                        tgt_fmap_dis[i] = F.vstack([tgt_fmap_dis[i], Variable(func_bGPU(e_buf_tgt[i][buf_batch_split*b_num:buf_batch_split*(b_num+1)]))])
-
-                y_target = self.dis(tgt_fmap_dis)
-
-                n_fmap_elements = y_target.shape[2]*y_target.shape[3]
-
-                loss_dis_src_s = F.sum(F.softplus(-y_source)) / n_fmap_elements / batchsize
-                loss_dis_tgt_s =  F.sum(F.softplus(y_target)) / n_fmap_elements / batchsize
-                loss_dis_s = loss_dis_src_s + loss_dis_tgt_s
-                loss_dis_s.backward()
-
-                loss_dis_s.unchain_backward()
-                loss_dis += loss_dis_s
-                loss_dis_src += loss_dis_src_s
-                loss_dis_tgt += loss_dis_tgt_s
-                del src_fmap_dis
-                del tgt_fmap_dis
-
-                for i in range(len(src_fmap)):
-                    if len(src_fmap_tobuf) == 0:
-                        src_fmap_tobuf.append(chainer.cuda.to_cpu(src_fmap[i].data))
-                        tgt_fmap_tobuf.append(chainer.cuda.to_cpu(tgt_fmap[i].data))
-                    else:
-                        src_fmap_tobuf[i] = np.vstack((src_fmap_tobuf[i],chainer.cuda.to_cpu(src_fmap[i].data)))
-                        tgt_fmap_tobuf[i] = np.vstack((tgt_fmap_tobuf[i], chainer.cuda.to_cpu(tgt_fmap[i].data)))
-                for i in range(len(src_fmap)):
-                    src_fmap_tobuf[i] = src_fmap_tobuf[i][:use_bufsize_l]
-                    tgt_fmap_tobuf[i] = tgt_fmap_tobuf[i][:use_bufsize_l]
-
-            dis_optimizer.update()
-            #save fmap to buffer
-
-            # for i in range(len(src_fmap)):
-            #     src_fmap_tobuf.append(chainer.cuda.to_cpu(src_fmap[i].data[:use_bufsize]))
-            #     tgt_fmap_tobuf.append(chainer.cuda.to_cpu(tgt_fmap[i].data[:use_bufsize]))
+            for i in range(len(src_fmap)):
+                src_fmap_tobuf.append(chainer.cuda.to_cpu(src_fmap[i].data[:use_bufsize]))
+                tgt_fmap_tobuf.append(chainer.cuda.to_cpu(tgt_fmap[i].data[:use_bufsize]))
             self.buf.set_examples(src_fmap_tobuf, tgt_fmap_tobuf)
 
         batch_source = self.get_iterator('main').next()
@@ -1209,6 +1200,9 @@ class Adv_updater_(chainer.training.StandardUpdater):
             # print("s_img initialized:{}iteration".format(self.iteration)) #debug
         batch_source_array = convert.concat_examples(batch_source, self.device)
         batch_target = self.get_iterator('target').next()
+        if type(batch_target[0]) == tuple:
+            batch_target_org = [x[1] for x in batch_target]
+            batch_target = [x[0] for x in batch_target]
         # if self.iteration == 0:
         #     self.t_img = batch_target[0]
         src_fmap = self.t_enc(batch_source_array[0])  # src feature map
@@ -1216,10 +1210,19 @@ class Adv_updater_(chainer.training.StandardUpdater):
 
         self.cls.cleargrads()
 
+        if self.generator and self.coGAN:
+            self.generator.cleargrads()
+            src_fmap[0] += self.generator(batch_source_array[0])
+
         if self.rec_adv:
-            y_target_enc = self.dis(tgt_fmap)
-            loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
-            loss_t_enc.backward()
+            if self.adv_inv:
+                y_target_enc = self.dis(src_fmap)
+                loss_t_enc = F.sum(F.softplus(y_target_enc)) / n_fmap_elements / batchsize
+                loss_t_enc.backward()
+            else:
+                y_target_enc = self.dis(tgt_fmap)
+                loss_t_enc = F.sum(F.softplus(-y_target_enc)) / n_fmap_elements / batchsize
+                loss_t_enc.backward()
 
         mb_locs, mb_confs = self.cls.multibox(src_fmap)
         loc_loss, conf_loss = multibox_loss(
@@ -1227,6 +1230,9 @@ class Adv_updater_(chainer.training.StandardUpdater):
         cls_loss = loc_loss * self.alpha + conf_loss #cls loss
 
         cls_loss.backward()
+
+        if self.generator and self.coGAN:
+            gen_optimizer.update()
 
         # if self.reconstructor:
         #     # tgt_fmap = self.t_enc(Variable(xp.array(batch_target)))
@@ -1264,29 +1270,70 @@ class Adv_updater_(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             self.reconstructor.cleargrads()
-            # self.rec_batch_split = 16
             loss_rec_sum = 0
+            if self.generator:
+                self.generator.cleargrads()
+                loss_rec_aug_sum = 0
+                if self.gen_type == "inject_freeze":
+                    rec_temp = self.reconstructor.__class__(self.reconstructor["upsample"]).to_gpu()
+                    rec_temp.copyparams(self.reconstructor)
+                    rec_temp.cleargrads()
+            # self.rec_batch_split = 16
             # loss_weight = 0.1
-            for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
-                batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
-                split_coef = len(batch_split) / len(batch_target)
-                t_data = Variable(xp.array(batch_split)) #/ 255
-                tgt_fmap = self.t_enc(t_data)
-                for i in range(len(tgt_fmap)-1):
-                    t_map = tgt_fmap.pop()
-                    t_map.unchain_backward()
-                    del t_map
-                # del src_fmap
-                image_rec = self.reconstructor(tgt_fmap[0])
-                if self.rec_loss_func == "L1":
-                    loss_rec = F.mean_absolute_error(image_rec, t_data)
-                elif self.rec_loss_func == "L2":
-                    loss_rec = F.mean_squared_error(image_rec, t_data)
-                loss_rec *= split_coef * self.rec_weight
-                loss_rec.backward()
-                loss_rec.unchain_backward()
-                loss_rec_sum += loss_rec.data
-                del loss_rec
+            if self.t_rec_learn:
+                for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
+                    batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
+                    if type(batch_target[0]) == tuple:
+                        batch_split_org = batch_target_org[self.rec_batch_split * b_num:self.rec_batch_split * (b_num + 1)]
+                        t_data_org = Variable(xp.array(batch_split_org))
+                    split_coef = len(batch_split) / len(batch_target)
+                    t_data = Variable(xp.array(batch_split)) #/ 255
+                    tgt_fmap = self.t_enc(t_data)
+                    for i in range(len(tgt_fmap)-1):
+                        t_map = tgt_fmap.pop()
+                        t_map.unchain_backward()
+                        del t_map
+                    # del src_fmap
+                    # if self.generator:
+                    #     tgt_fmap[0] += self.generator(t_data)
+                    image_rec = self.reconstructor(tgt_fmap[0])
+                    img_org = t_data_org if type(batch_target[0]) == tuple else t_data
+                    if self.rec_loss_func == "L1":
+                        loss_rec = F.mean_absolute_error(image_rec, img_org)
+                    elif self.rec_loss_func == "L2":
+                        loss_rec = F.mean_squared_error(image_rec, img_org)
+                    loss_rec *= split_coef * self.rec_weight
+                    loss_rec.backward()
+                    if self.generator and self.t_gen_learn:
+                        if self.gen_type == "separate":
+                            image_rec.unchain_backward()
+                            tgt_delta = self.generator(t_data)
+                            image_rec_delta = self.reconstructor(tgt_delta)
+                            loss_rec_aug = F.mean_absolute_error(image_rec+image_rec_delta, img_org)
+                            loss_rec_aug *= split_coef * self.rec_weight
+                            loss_rec_aug.backward()
+                        elif self.gen_type == "inject_freeze":
+                            image_rec.unchain_backward()
+                            tgt_fmap[0] += self.generator(t_data)
+                            image_rec = rec_temp(tgt_fmap[0])
+                            loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
+                            loss_rec_aug *= split_coef * self.rec_weight
+                            loss_rec_aug.backward()
+                        elif self.gen_type == "inject":
+                            # image_rec.unchain_backward()
+                            tgt_fmap[0] += self.generator(t_data)
+                            image_rec = self.reconstructor(tgt_fmap[0])
+                            loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
+                            loss_rec_aug *= split_coef * self.rec_weight
+                            loss_rec_aug.backward()
+                    loss_rec.unchain_backward()
+                    loss_rec_sum += loss_rec.data
+                    del loss_rec
+                    if self.generator:
+                        loss_rec_aug.unchain_backward()
+                        loss_rec_aug_sum += loss_rec_aug.data
+                        del loss_rec_aug
+
             if self.semantic:
                 loss_sem_sum = 0
                 if self.semantic == "small":
@@ -1307,7 +1354,13 @@ class Adv_updater_(chainer.training.StandardUpdater):
                         s_map = src_fmap.pop()
                         s_map.unchain_backward()
                         del s_map
-                    image_rec = self.reconstructor(src_fmap[0])
+                    if self.generator:
+                        if self.gen_type.find("inject") > -1:
+                            src_fmap[0] += self.generator(s_data)
+                        image_rec = self.reconstructor(src_fmap[0])
+                    # if self.generator:
+                        if self.gen_type == "separate":
+                            image_rec += self.reconstructor(self.generator(s_data))
                     src_fmap_ = self.t_enc(image_rec)
                     mb_locs, mb_confs = self.cls.multibox(src_fmap_)
                     loc_loss, conf_loss = multibox_loss(
@@ -1319,6 +1372,8 @@ class Adv_updater_(chainer.training.StandardUpdater):
                     loss_sem_sum += cls_loss_.data
                     del cls_loss_
             rec_optimizer.update()
+            if self.generator:
+                gen_optimizer.update()
             if self.semantic != "small":
                 cls_optimizer.update()
             # loss_rec = loss_rec.data
@@ -1336,25 +1391,93 @@ class Adv_updater_(chainer.training.StandardUpdater):
 
         if self.reconstructor:
             chainer.reporter.report({'loss_rec': loss_rec_sum})
+            if self.generator:
+                chainer.reporter.report({'loss_rec_aug': loss_rec_aug_sum})
             if self.semantic:
                 chainer.reporter.report({'loss_sem': loss_sem_sum})
-            if self.iteration % self.snapshot_interval == 0:
+            if self.iteration == 0 or (self.iteration + 1) % self.snapshot_interval == 0:
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
-                s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
-                s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
-                s_img_rec[s_img_rec < 0] = 0
-                s_img_rec[s_img_rec > 255] = 255
-                s_img_rec = s_img_rec.transpose(1, 2, 0).astype(np.uint8)
-                s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
-                cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration)),s_img_rec)
-                t_fmap = self.t_enc(Variable(xp.array([(self.t_img-self.cls.mean).astype(np.float32)])))
-                t_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[
-                    0]
-                t_img_rec[t_img_rec < 0] = 0
-                t_img_rec[t_img_rec > 255] = 255
-                t_img_rec = t_img_rec.transpose(1, 2, 0).astype(np.uint8)
-                t_img_rec = cv.cvtColor(t_img_rec, cv.COLOR_RGB2BGR)
-                cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration)), t_img_rec)
+                s_original = (self.s_img-self.cls.mean).astype(np.float32)
+                t_original = (self.t_img-self.cls.mean).astype(np.float32)
+                if self.iteration == 0:
+                    _s_original = self._postprocess(self.s_img.copy())
+                    _t_original = self._postprocess(self.t_img.copy())
+                    cv.imwrite(os.path.join(self.outdir, "s_img_original.jpg"), _s_original)
+                    cv.imwrite(os.path.join(self.outdir, "t_img_original.jpg"), _t_original)
+                with chainer.no_backprop_mode():
+                    s_fmap = self.t_enc(Variable(xp.array([s_original])))
+                    # if self.generator:
+                    #     delta = self.generator(Variable(xp.array([s_original])))
+                    # else:
+                    #     delta = 0
+                    s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
+                    if self.generator:
+                        if self.gen_type == "separate":
+                            s_img_rec_aug = s_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([s_original])))).data)[0]
+                        elif self.gen_type.find("inject") > -1:
+                            s_fmap_delta = self.generator(Variable(xp.array([s_original])))
+                            s_img_rec_aug = \
+                            (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]+s_fmap_delta).data) + self.cls.mean)[0]
+                        s_img_rec_aug = self._postprocess(s_img_rec_aug)
+                        cv.imwrite(os.path.join(self.outdir, "s_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
+                                   s_img_rec_aug)
+                    s_img_rec = self._postprocess(s_img_rec)
+                    cv.imwrite(os.path.join(self.outdir, "s_img_rec_iter{}.jpg".format(self.iteration + 1)), s_img_rec)
+                    # if self.generator:
+                    #     s_img_rec_sem = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
+                    #     s_img_rec_delta = (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
+                    #     s_img_rec_sem = self._postprocess(s_img_rec_sem)
+                    #     s_img_rec_delta = self._postprocess(s_img_rec_delta)
+                    #     cv.imwrite(os.path.join(self.outdir, "s_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
+                    #                s_img_rec_sem)
+                    #     cv.imwrite(os.path.join(self.outdir, "s_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
+                    #                s_img_rec_delta)
+
+                    t_fmap = self.t_enc(Variable(xp.array([t_original])))
+                    # if self.generator:
+                    #     delta = self.generator(Variable(xp.array([t_original])))
+                    # else:
+                    #     delta = 0
+                    t_img_rec = \
+                    (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
+                    if self.generator:
+                        if self.gen_type == "separate":
+                            t_img_rec_aug = t_img_rec + chainer.backends.cuda.to_cpu(self.reconstructor(self.generator(Variable(xp.array([t_original])))).data)[0]
+                        elif self.gen_type.find("inject") > -1:
+                            t_fmap_delta = self.generator(Variable(xp.array([t_original])))
+                            t_img_rec_aug = \
+                            (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]+t_fmap_delta).data) + self.cls.mean)[0]
+                        t_img_rec_aug = self._postprocess(t_img_rec_aug)
+                        cv.imwrite(os.path.join(self.outdir, "t_img_rec_aug_iter{}.jpg".format(self.iteration + 1)),
+                                   t_img_rec_aug)
+                    t_img_rec = self._postprocess(t_img_rec)
+                    cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration + 1)), t_img_rec)
+                    # if self.generator:
+                    #     t_img_rec_sem = \
+                    #     (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[0]
+                    #     t_img_rec_delta = \
+                    #     (chainer.backends.cuda.to_cpu(self.reconstructor(delta).data) + self.cls.mean)[0]
+                    #     t_img_rec_sem = self._postprocess(t_img_rec_sem)
+                    #     t_img_rec_delta = self._postprocess(t_img_rec_delta)
+                    #     cv.imwrite(os.path.join(self.outdir, "t_img_rec_sem_iter{}.jpg".format(self.iteration + 1)),
+                    #                t_img_rec_sem)
+                    #     cv.imwrite(os.path.join(self.outdir, "t_img_rec_delta_iter{}.jpg".format(self.iteration + 1)),
+                    #                t_img_rec_delta)
+                # s_fmap = self.t_enc(Variable(xp.array([(self.s_img-self.cls.mean).astype(np.float32)])) )
+                # s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
+                # s_img_rec[s_img_rec < 0] = 0
+                # s_img_rec[s_img_rec > 255] = 255
+                # s_img_rec = s_img_rec.transpose(1, 2, 0).astype(np.uint8)
+                # s_img_rec = cv.cvtColor(s_img_rec, cv.COLOR_RGB2BGR)
+                # cv.imwrite(os.path.join(self.outdir,"s_img_rec_iter{}.jpg".format(self.iteration + 1)),s_img_rec)
+                # t_fmap = self.t_enc(Variable(xp.array([(self.t_img-self.cls.mean).astype(np.float32)])))
+                # t_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data) + self.cls.mean)[
+                #     0]
+                # t_img_rec[t_img_rec < 0] = 0
+                # t_img_rec[t_img_rec > 255] = 255
+                # t_img_rec = t_img_rec.transpose(1, 2, 0).astype(np.uint8)
+                # t_img_rec = cv.cvtColor(t_img_rec, cv.COLOR_RGB2BGR)
+                # cv.imwrite(os.path.join(self.outdir, "t_img_rec_iter{}.jpg".format(self.iteration + 1)), t_img_rec)
 
     def serialize(self, serializer):
         super().serialize(serializer)
