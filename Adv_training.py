@@ -16,6 +16,7 @@ from COWC_dataset_processed import COWC_fmap_set, Dataset_imgonly, COWC_dataset_
 from SSD_training import  Transform, ConcatenatedDataset
 from utils import initSSD
 from SSD_test import ssd_evaluator
+from discriminators import *
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -71,6 +72,9 @@ def main():
     parser.add_argument('--disable_t_rec', action="store_true", help='disable learning of reconstructor in target domain')
     parser.add_argument('--disable_t_gen', action="store_true",
                         help='disable learning of generator in target domain')
+    parser.add_argument('--raw_adv', action="store_true")
+    parser.add_argument('--raw_buffer_size', type=int,default=50)
+    parser.add_argument('--r_dis_class', type=str, default="DCGANDiscriminator",help='DA discriminator class name to be used for reconstructed image')
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -95,6 +99,8 @@ def main():
             report_keys += ["loss_rec_aug"]
         if args.semantic:
             report_keys += ["loss_sem"]
+    if args.raw_adv:
+        report_keys += ["loss_rec_fool", "loss_dis_raw", 'loss_dis_src_raw', 'loss_dis_tgt_raw']
 
     Discriminator = eval(args.dis_class)
     discriminator = Discriminator()
@@ -187,6 +193,14 @@ def main():
         updater_args["t_gen_learn"] = not (args.disable_t_gen)
     else:
         updater_args["generator"] = None
+    updater_args["raw_adv"] = args.raw_adv
+    if args.raw_adv:
+        r_dis = DCGANDiscriminator()
+        updater_args["r_dis"] = r_dis
+        r_buffer_s = HistoricalBuffer(args.raw_buffer_size, s_img.shape[-1])
+        # r_buffer_t = HistoricalBuffer(args.raw_buffer_size, t_img.shape[-1])
+        updater_args["r_buffer_s"] = r_buffer_s
+        # updater_args["r_buffer_t"] = r_buffer_t
 
     # Set up optimizers
     opts = {}
@@ -197,6 +211,8 @@ def main():
         opts["opt_rec"] = make_optimizer(reconstructor, args.adam_alpha, args.adam_beta1, args.adam_beta2)
         if args.generator:
             opts["opt_gen"] = make_optimizer(generator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    if args.raw_adv:
+        opts["opt_r_dis"] = make_optimizer(r_dis, args.adam_alpha, args.adam_beta1, args.adam_beta2)
 
     updater_args["optimizer"] = opts
     updater_args["models"] = models

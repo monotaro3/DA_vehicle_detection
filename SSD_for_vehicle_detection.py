@@ -918,4 +918,60 @@ class fmapBuffer(object):
     #         ranking_list[i][0] = int(ranking_list[i][0]) #iter number must be int
     #     return ranking_list
 
+class HistoricalBuffer():
+    def __init__(self, buffer_size=50, image_size=256, image_channels=3, gpu = -1):
+        self._buffer_size = buffer_size
+        self._img_size = image_size
+        self._img_ch = image_channels
+        self._cnt = 0
+        self.gpu = gpu
+        import numpy
+        import cupy
+        xp = numpy if gpu < 0 else cupy
+        self._buffer = xp.zeros((self._buffer_size, self._img_ch, self._img_size, self._img_size)).astype("f")
+
+    def get_and_update(self, data, prob=0.5):
+        if self._buffer_size == 0:
+            return data
+        xp = chainer.cuda.get_array_module(data)
+
+        if len(data) == 1:
+            if self._cnt < self._buffer_size:
+                self._buffer[self._cnt,:] = chainer.cuda.to_cpu(data[0,:]) if self.gpu == -1 else data[0,:]
+                self._cnt += 1
+                return data
+            else:
+                if np.random.rand() > prob:
+                    self._buffer[np.random.randint(self._cnt), :] = chainer.cuda.to_cpu(data[0,:]) if self.gpu == -1 else data[0,:]
+                    return data
+                else:
+                    return xp.expand_dims(xp.asarray(self._buffer[np.random.randint(self._cnt),:]),axis=0)
+        else:
+            data = xp.copy(data)
+            use_buf = len(data) // 2
+            indices_rand = np.random.permutation(len(data))
+
+            avail_buf = min(self._cnt, use_buf)
+            if avail_buf > 0:
+                indices_use_buf = np.random.choice(self._cnt,avail_buf,replace=False)
+                data[indices_rand[-avail_buf:],:] = xp.asarray(self._buffer[indices_use_buf,:])
+            room_buf = self._buffer_size - self._cnt
+            n_replace_buf = min(self._cnt,len(data)-avail_buf-room_buf)
+            if n_replace_buf > 0:
+                indices_replace_buf = np.random.choice(self._cnt,n_replace_buf,replace=False)
+                self._buffer[indices_replace_buf,:] =  chainer.cuda.to_cpu(data[indices_rand[-avail_buf-n_replace_buf:-avail_buf],:]) \
+                    if self.gpu == -1 else data[indices_rand[-avail_buf-n_replace_buf:-avail_buf],:]
+            if room_buf > 0:
+                n_fill_buf = min(room_buf, len(data)-avail_buf)
+                self._buffer[self._cnt:self._cnt+n_fill_buf,:] = chainer.cuda.to_cpu(data[indices_rand[0:n_fill_buf],:]) \
+                    if self.gpu == -1 else data[indices_rand[0:n_fill_buf],:]
+                self._cnt += n_fill_buf
+            return data
+
+    def serialize(self, serializer):
+        self._cnt = serializer('cnt', self._cnt)
+        self.gpu = serializer('gpu', self.gpu)
+        self._buffer = serializer('buffer', self._buffer)
+
+
 
