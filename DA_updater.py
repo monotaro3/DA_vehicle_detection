@@ -1403,6 +1403,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                     # if self.generator:
                         if self.gen_type == "separate":
                             image_rec += self.reconstructor(self.generator(s_data))
+                    else:
+                        image_rec = self.reconstructor(src_fmap[0])
                     if self.raw_adv:
                         loss_rec_fool = self.loss_func_adv_gen(self.r_dis(image_rec))
                         loss_rec_fool *= split_coef
