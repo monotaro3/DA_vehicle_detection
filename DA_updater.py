@@ -1371,7 +1371,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     loss_rec.unchain_backward()
                     loss_rec_sum += loss_rec.data
                     del loss_rec
-                    if self.generator:
+                    if self.generator and self.t_gen_learn:
                         loss_rec_aug.unchain_backward()
                         loss_rec_aug_sum += loss_rec_aug.data
                         del loss_rec_aug
