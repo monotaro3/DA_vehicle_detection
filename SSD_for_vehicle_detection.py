@@ -10,6 +10,7 @@ import chainer.functions as F
 from chainercv import utils
 from chainer import Variable, link_hooks
 from chainercv.links.model.ssd import Normalize
+from chainercv import transforms
 # from chainercv.links.model.ssd.multibox_coder import _unravel_index
 
 
@@ -286,6 +287,14 @@ class SSD300_vd(SSD300):
         if path:
             # _load_npz(path, self)
             chainer.serializers.load_npz(path, self, strict=False)
+
+    def _prepare(self, img):
+        img = img.astype(np.float32)
+        img = transforms.resize(img, (self.insize, self.insize))
+        img -= self.mean
+        if chainer.get_dtype() == chainer.mixed16:
+            img = img.astype(np.float16)
+        return img
 
 class ADDA_Discriminator(Chain):
     def __init__(self, wscale=0.02):
