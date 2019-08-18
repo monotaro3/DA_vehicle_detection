@@ -148,7 +148,6 @@ class Transform(object):
 
         if self.use_fp16:
             img = img.astype(np.float16)
-            img_original = img_original.astype(np.float16)
 
         if type(in_data) == tuple:
             mb_loc, mb_label = self.coder.encode(bbox, label)
@@ -157,6 +156,8 @@ class Transform(object):
 
         if type(in_data) != tuple:
             if self.transform and self.original:
+                if self.use_fp16:
+                    img_original = img_original.astype(np.float16)
                 return img, img_original
             else:
                 return img
