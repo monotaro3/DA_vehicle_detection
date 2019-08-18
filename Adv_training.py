@@ -87,6 +87,7 @@ def main():
     parser.add_argument('--tgt_anno_data', type=str, help='target anotation dataset directory')
     parser.add_argument('--s_t_ratio',type=int, nargs=2)
     parser.add_argument('--out_progress')
+    parser.add_argument('--use_fp16', action="store_true")  #experimental
 
     args = parser.parse_args()
 
@@ -101,6 +102,9 @@ def main():
             report_keys += ["loss_sem"]
     if args.raw_adv:
         report_keys += ["loss_rec_fool", "loss_dis_raw", 'loss_dis_src_raw', 'loss_dis_tgt_raw']
+
+    if args.use_fp16:
+        chainer.global_config.dtype = chainer.mixed16
 
     Discriminator = eval(args.dis_class)
     discriminator = Discriminator()
