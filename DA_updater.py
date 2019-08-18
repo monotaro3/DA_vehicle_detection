@@ -1420,6 +1420,9 @@ class Adv_updater(chainer.training.StandardUpdater):
                     cls_loss_.unchain_backward()
                     loss_sem_sum += cls_loss_.data
                     del cls_loss_
+                    if self.raw_adv:
+                        loss_rec_fool.unchain_backward()
+                        del loss_rec_fool
             rec_optimizer.update()
             if self.generator:
                 gen_optimizer.update()
