@@ -81,7 +81,7 @@ class MultiboxTrainChain(chainer.Chain):
 
 class Transform(object):
 
-    def __init__(self, coder, size, mean,transform=True, original = False):
+    def __init__(self, coder, size, mean,transform=True, original = False, use_fp16=False):
         # to send cpu, make a copy
         self.coder = copy.copy(coder)
         self.coder.to_cpu()
@@ -91,6 +91,7 @@ class Transform(object):
 
         self.transform = transform
         self.original = original
+        self.use_fp16 = use_fp16
 
     def __call__(self, in_data):
         # There are five data augmentation steps
@@ -144,8 +145,15 @@ class Transform(object):
 
         # Preparation for SSD network
         img -= self.mean
+
+        if self.use_fp16:
+            img = img.astype(np.float16)
+            img_original = img_original.astype(np.float16)
+
         if type(in_data) == tuple:
             mb_loc, mb_label = self.coder.encode(bbox, label)
+            if self.use_fp16:
+                mb_loc = mb_loc.astype(np.float16)
 
         if type(in_data) != tuple:
             if self.transform and self.original:
