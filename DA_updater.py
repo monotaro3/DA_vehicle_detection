@@ -1452,10 +1452,15 @@ class Adv_updater(chainer.training.StandardUpdater):
                 chainer.reporter.report({'loss_rec_aug': loss_rec_aug_sum})
             if self.semantic:
                 chainer.reporter.report({'loss_sem': loss_sem_sum})
+
             if self.iteration == 0 or (self.iteration + 1) % self.snapshot_interval == 0:
+                if chainer.get_dtype() == chainer.mixed16:
+                    save_dtype = np.float16
+                else:
+                    save_dtype = np.float32
                 # print("s_img snapshot:{}iteration".format(self.iteration))  # debug
-                s_original = (self.s_img-self.cls.mean).astype(np.float32)
-                t_original = (self.t_img-self.cls.mean).astype(np.float32)
+                s_original = (self.s_img-self.cls.mean).astype(save_dtype)
+                t_original = (self.t_img-self.cls.mean).astype(save_dtype)
                 if self.iteration == 0:
                     _s_original = self._postprocess(self.s_img.copy())
                     _t_original = self._postprocess(self.t_img.copy())
