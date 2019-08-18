@@ -188,7 +188,7 @@ class CNABlock(chainer.Chain):
 
         super(CNABlock, self).__init__(**layers)
         self.register_persistent('norm')
-        self.register_persistent('activation')
+        # self.register_persistent('activation')
         self.register_persistent('nn')
 
     # override serialize() to support serializing function object
