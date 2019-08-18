@@ -75,6 +75,7 @@ def main():
     parser.add_argument('--raw_adv', action="store_true")
     parser.add_argument('--raw_buffer_size', type=int,default=50)
     parser.add_argument('--r_dis_class', type=str, default="DCGANDiscriminator",help='DA discriminator class name to be used for reconstructed image')
+    parser.add_argument('--r_dis_layers', type=int, default=3)
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -199,7 +200,7 @@ def main():
         updater_args["generator"] = None
     updater_args["raw_adv"] = args.raw_adv
     if args.raw_adv:
-        r_dis = DCGANDiscriminator()
+        r_dis = DCGANDiscriminator(down_layers=args.r_dis_layers)
         updater_args["r_dis"] = r_dis
         r_buffer_s = HistoricalBuffer(args.raw_buffer_size, s_img.shape[-1])
         # r_buffer_t = HistoricalBuffer(args.raw_buffer_size, t_img.shape[-1])
