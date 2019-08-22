@@ -1113,6 +1113,10 @@ class Adv_updater(chainer.training.StandardUpdater):
         # self.t_img = None
         # self.coral_batchsize = 16 #hardcoding to be removed
         # self.CORAL_weight = 1 #hardcoding to be removed
+        if chainer.get_dtype() == chainer.mixed16:
+            self.use_dtype = self.xp.float16
+        else:
+            self.use_dtype = self.xp.float32
 
     def _postprocess(self,img):
         img[img < 0] = 0
@@ -1193,7 +1197,6 @@ class Adv_updater(chainer.training.StandardUpdater):
 
                 y_source = self.dis(src_fmap_dis)
 
-
                 tgt_fmap_dis = []
                 for i in range(len(tgt_fmap)):
                     tgt_fmap_dis.append(F.copy(tgt_fmap[i][0:batchsize-size],self.gpu_num))
@@ -1236,7 +1239,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     if self.generator:
                         if self.gen_type.find("inject") > -1:
                             if self.generator.__class__.__name__.find("DCGAN") > -1:
-                                s_data_ = Variable(batch_source_array[0] + xp.array(self.cls.mean))
+                                s_data_ = Variable(batch_source_array[0] + xp.array(self.cls.mean).astype(self.use_dtype))
                                 s_data_ = self._normalize(s_data_)
                             else:
                                 s_data_ = Variable(batch_source_array[0])
@@ -1246,7 +1249,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                 s_converted = Variable(s_converted)
                 t_data = Variable(xp.array(batch_target))
                 if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                    t_data += Variable(xp.array(self.cls.mean))
+                    t_data += Variable(xp.array(self.cls.mean).astype(self.use_dtype))
                     t_data = self._normalize(t_data)
                 loss_dis_src_r = self.loss_func_adv_dis_fake(self.r_dis(s_converted))
                 loss_dis_tgt_r = self.loss_func_adv_dis_real(self.r_dis(t_data))
@@ -1369,7 +1372,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     #     image_rec -= Variable(xp.array(self.cls.mean))
                     img_org = t_data_org if type(batch_target[0]) == tuple else t_data
                     if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                        img_org += Variable(xp.array(self.cls.mean))
+                        img_org += Variable(xp.array(self.cls.mean).astype(self.use_dtype))
                         img_org = self._normalize(img_org)
                     if self.rec_loss_func == "L1":
                         loss_rec = F.mean_absolute_error(image_rec, img_org)
@@ -1431,7 +1434,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                         src_fmap[0] = F.tanh(src_fmap[0])
                     if self.generator:
                         if self.generator.__class__.__name__.find("DCGAN") > -1:
-                            s_data_ = s_data + Variable(xp.array(self.cls.mean))
+                            s_data_ = s_data + Variable(xp.array(self.cls.mean).astype(self.use_dtype))
                             s_data_ = self._normalize(s_data_)
                         else:
                             s_data_ = s_data
@@ -1450,7 +1453,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                         loss_rec_fool_sum += loss_rec_fool.data
                     if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
                         image_rec = self._denormalize(image_rec)
-                        image_rec -= Variable(xp.array(self.cls.mean))
+                        image_rec -= Variable(xp.array(self.cls.mean).astype(self.use_dtype))
                     src_fmap_ = self.t_enc(image_rec)
                     mb_locs, mb_confs = self.cls.multibox(src_fmap_)
                     loc_loss, conf_loss = multibox_loss(
