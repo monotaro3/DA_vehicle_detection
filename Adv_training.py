@@ -73,7 +73,7 @@ def main():
     parser.add_argument('--disable_t_gen', action="store_true",
                         help='disable learning of generator in target domain')
     parser.add_argument('--raw_adv', action="store_true")
-    parser.add_argument('--raw_buffer_size', type=int,default=50)
+    parser.add_argument('--raw_buffer_size', type=int,default=128)
     parser.add_argument('--r_dis_class', type=str, default="DCGANDiscriminator",help='DA discriminator class name to be used for reconstructed image')
     parser.add_argument('--r_dis_layers', type=int, default=3)
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')

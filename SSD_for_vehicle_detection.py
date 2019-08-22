@@ -12,6 +12,7 @@ from chainer import Variable, link_hooks
 from chainercv.links.model.ssd import Normalize
 from chainercv import transforms
 # from chainercv.links.model.ssd.multibox_coder import _unravel_index
+from ops import reflectPad
 
 
 defaultbox_size_300 = {
@@ -674,6 +675,98 @@ class Recontructor(Chain):
         h = self.conv0(h)
         return h
 
+class Recontructor_VGG_DCGAN(Chain):
+    def __init__(self,upsample="deconv",norm="bn",activation="l_relu",pad="reflect"):
+        #w = chainer.initializers.Normal(wscale)
+        self.upsample = upsample
+        # self.norm = norm
+        norm_option = {"bn":L.BatchNormalization}
+        self.activation_option = {"relu":F.relu,"l_relu":F.leaky_relu}
+        self.activation = activation
+        self.pad = pad
+        super(Recontructor_VGG_DCGAN, self).__init__()
+        with self.init_scope():
+            self.conv4_3 = L.Convolution2D(512,3,pad=1)
+            self.norm4_3 = norm_option[norm](512)
+            self.conv4_2 = L.Convolution2D(512, 3, pad=1)
+            self.norm4_2 = norm_option[norm](512)
+            self.conv4_1 = L.Convolution2D(512, 3, pad=1)
+            self.norm4_1 = norm_option[norm](512)
+            self.conv3_3 = L.Convolution2D(256, 3, pad=1)
+            self.norm3_3 = norm_option[norm](256)
+            self.conv3_2 = L.Convolution2D(256, 3, pad=1)
+            self.norm3_2 = norm_option[norm](256)
+            self.conv3_1 = L.Convolution2D(256, 3, pad=1)
+            self.norm3_1 = norm_option[norm](256)
+            self.conv2_2 = L.Convolution2D(128, 3, pad=1)
+            self.norm2_2 = norm_option[norm](128)
+            self.conv2_1 = L.Convolution2D(128, 3, pad=1)
+            self.norm2_1 = norm_option[norm](128)
+            self.conv1_2 = L.Convolution2D(64, 3, pad=1)
+            self.norm1_2 = norm_option[norm](64)
+            self.conv1_1 = L.Convolution2D(64, 3, pad=1)
+            self.norm1_1 = norm_option[norm](64)
+            self.conv0 = L.Convolution2D(3, 3, pad=1)
+            if self.upsample == "deconv":
+                self.up_conv3 = L.Deconvolution2D(512,3,stride=2,pad=1)
+                self.norm_up_conv3 = norm_option[norm](512)
+                self.up_conv2 = L.Deconvolution2D(256, 3, stride=2, pad=1)
+                self.norm_up_conv2 = norm_option[norm](256)
+                self.up_conv1 = L.Deconvolution2D(128, 3, stride=2, pad=1)
+                self.norm_up_conv1 = norm_option[norm](128)
+            elif self.upsample == "unpool_conv":
+                self.up_conv3 = L.Convolution2D(512,3,pad=1)
+                self.norm_up_conv3 = norm_option[norm](512)
+                self.up_conv2 = L.Convolution2D(256, 3, pad=1)
+                self.norm_up_conv2 = norm_option[norm](256)
+                self.up_conv1 = L.Convolution2D(128, 3, pad=1)
+                self.norm_up_conv1 = norm_option[norm](128)
+        self.register_persistent('activation')
+
+    def __call__(self, x):
+        h = self.activation_option[self.activation](self.norm4_3(self.conv4_3(x)))
+        h = self.activation_option[self.activation](self.norm4_2(self.conv4_2(h)))
+        h = self.activation_option[self.activation](self.norm4_1(self.conv4_1(h)))
+        if self.upsample == "deconv":
+            h = self.activation_option[self.activation](self.norm_up_conv3(self.up_conv3(h)))
+        else:
+            h = F.unpooling_2d(h,2)
+        # h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')
+        if self.upsample == "unpool_conv":
+            h = self.activation_option[self.activation](self.norm_up_conv3(self.up_conv3(h)))
+        h = self.activation_option[self.activation](self.norm3_3(self.conv3_3(h)))
+        h = self.activation_option[self.activation](self.norm3_2(self.conv3_2(h)))
+        h = self.activation_option[self.activation](self.norm3_1(self.conv3_1(h)))
+        if self.upsample == "deconv":
+            h = self.activation_option[self.activation](self.norm_up_conv2(self.up_conv2(h)))
+        else:
+            h = F.unpooling_2d(h,2)
+        if self.pad == "reflect":
+            h = reflectPad(h,1)
+            h = F.get_item(h,(slice(None),slice(None),slice(1,h.shape[2]),slice(1,h.shape[3])))
+        else:
+            h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')  #reflectpad can be an option
+        if self.upsample == "unpool_conv":
+            h = self.activation_option[self.activation](self.norm_up_conv2(self.up_conv2(h)))
+        h = self.activation_option[self.activation](self.norm2_2(self.conv2_2(h)))
+        h = self.activation_option[self.activation](self.norm2_1(self.conv2_1(h)))
+        if self.upsample == "deconv":
+            h = self.activation_option[self.activation](self.norm_up_conv1(self.up_conv1(h)))
+        else:
+            h = F.unpooling_2d(h,2)
+        if self.pad == "reflect":
+            h = reflectPad(h,1)
+            h = F.get_item(h,(slice(None),slice(None),slice(1,h.shape[2]),slice(1,h.shape[3])))
+        else:
+            h = F.pad(h, ((0, 0), (0, 0), (0, 1), (0, 1)), mode='constant')
+        if self.upsample == "unpool_conv":
+            h = self.activation_option[self.activation](self.norm_up_conv1(self.up_conv1(h)))
+        h = self.activation_option[self.activation](self.norm1_2(self.conv1_2(h)))
+        h = self.activation_option[self.activation](self.norm1_1(self.conv1_1(h)))
+        h = self.conv0(h)
+        h = F.tanh(h)
+        return h
+
 class Generator_VGG16_simple(chainer.Chain):
     def __init__(self):
         super(Generator_VGG16_simple, self).__init__()
@@ -736,7 +829,105 @@ class Generator_VGG16_simple(chainer.Chain):
         #
         # return ys
 
+class Generator_VGG16_DCGAN(chainer.Chain):
+    def __init__(self,norm="bn",activation="l_relu"):
+        super(Generator_VGG16_DCGAN, self).__init__()
+        norm_option = {"bn": L.BatchNormalization}
+        self.activation_option = {"relu": F.relu, "l_relu": F.leaky_relu}
+        self.activation = activation
+        with self.init_scope():
+            self.conv1_1 = L.Convolution2D(64, 3, pad=1)
+            self.norm1_1 = norm_option[norm](64)
+            self.conv1_2 = L.Convolution2D(64, 3, pad=1)
+            self.norm1_2 = norm_option[norm](64)
+            self.conv1_down = L.Convolution2D(64, 3, pad=1, stride=2)
+            self.norm1_down = norm_option[norm](64)
 
+            self.conv2_1 = L.Convolution2D(128, 3, pad=1)
+            self.conv2_2 = L.Convolution2D(128, 3, pad=1)
+            self.conv2_down = L.Convolution2D(128, 3, pad=1, stride=2)
+            self.norm2_1 = norm_option[norm](128)
+            self.norm2_2 = norm_option[norm](128)
+            self.norm2_down = norm_option[norm](128)
+
+            self.conv3_1 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_2 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_3 = L.Convolution2D(256, 3, pad=1)
+            self.conv3_down = L.Convolution2D(256, 3, pad=1, stride=2)
+            self.norm3_1 = norm_option[norm](256)
+            self.norm3_2 = norm_option[norm](256)
+            self.norm3_3 = norm_option[norm](256)
+            self.norm3_down = norm_option[norm](256)
+
+            self.conv4_1 = L.Convolution2D(512, 3, pad=1)
+            self.conv4_2 = L.Convolution2D(512, 3, pad=1)
+            self.conv4_3 = L.Convolution2D(512, 3, pad=1)
+            self.norm4_1 = norm_option[norm](512)
+            self.norm4_2 = norm_option[norm](512)
+            self.norm4_3 = norm_option[norm](512)
+            self.norm4 = Normalize(512, initial=initializers.Constant(20))
+
+            # self.conv5_1 = L.DilatedConvolution2D(512, 3, pad=1)
+            # self.conv5_2 = L.DilatedConvolution2D(512, 3, pad=1)
+            # self.conv5_3 = L.DilatedConvolution2D(512, 3, pad=1)
+            #
+            # self.conv6 = L.DilatedConvolution2D(1024, 3, pad=6, dilate=6)
+            # self.conv7 = L.Convolution2D(1024, 1)
+
+    def forward(self, x):
+        # ys = []
+        h = self.activation_option[self.activation](self.norm1_1(self.conv1_1(x)))
+        h = self.activation_option[self.activation](self.norm1_2(self.conv1_2(h)))
+        h = self.activation_option[self.activation](self.norm1_down(self.conv1_down(h)))
+
+        # h = F.relu(self.conv1_1(x))
+        # h = F.relu(self.conv1_2(h))
+        # h = self.conv1_down(h)
+        # h = F.max_pooling_2d(h, 2)
+
+        h = self.activation_option[self.activation](self.norm2_1(self.conv2_1(h)))
+        h = self.activation_option[self.activation](self.norm2_2(self.conv2_2(h)))
+        h = self.activation_option[self.activation](self.norm2_down(self.conv2_down(h)))
+
+        # h = F.relu(self.conv2_1(h))
+        # h = F.relu(self.conv2_2(h))
+        # h = F.max_pooling_2d(h, 2)
+
+        h = self.activation_option[self.activation](self.norm3_1(self.conv3_1(h)))
+        h = self.activation_option[self.activation](self.norm3_2(self.conv3_2(h)))
+        h = self.activation_option[self.activation](self.norm3_3(self.conv3_3(h)))
+        h = self.activation_option[self.activation](self.norm3_down(self.conv3_down(h)))
+
+        # h = F.relu(self.conv3_1(h))
+        # h = F.relu(self.conv3_2(h))
+        # h = F.relu(self.conv3_3(h))
+        # h = F.max_pooling_2d(h, 2)
+
+        h = self.activation_option[self.activation](self.norm4_1(self.conv4_1(h)))
+        h = self.activation_option[self.activation](self.norm4_2(self.conv4_2(h)))
+        h = self.activation_option[self.activation](self.norm4_3(self.conv4_3(h)))
+
+        # h = F.relu(self.conv4_1(h))
+        # h = F.relu(self.conv4_2(h))
+        # h = F.relu(self.conv4_3(h))
+        # ys.append(self.norm4(h))
+
+        h = self.norm4(h)
+
+        return F.tanh(h)
+
+        # h = F.max_pooling_2d(h, 2)
+        #
+        # h = F.relu(self.conv5_1(h))
+        # h = F.relu(self.conv5_2(h))
+        # h = F.relu(self.conv5_3(h))
+        # h = F.max_pooling_2d(h, 3, stride=1, pad=1)
+        #
+        # h = F.relu(self.conv6(h))
+        # h = F.relu(self.conv7(h))
+        # ys.append(h)
+        #
+        # return ys
 
 
 
