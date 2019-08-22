@@ -73,7 +73,8 @@ def main():
     parser.add_argument('--disable_t_rec', action="store_true", help='disable learning of reconstructor in target domain')
     parser.add_argument('--disable_t_gen', action="store_true",
                         help='disable learning of generator in target domain')
-    parser.add_argument('--raw_adv', action="store_true")
+    parser.add_argument('--raw_adv', type=int, choices=[1,2], help="1: alternative update, 2: simultaneous update")
+    parser.add_argument('--radv_batch_split', type=int, help="split batch size for raw_adv alternate training")
     parser.add_argument('--raw_buffer_size', type=int,default=128)
     parser.add_argument('--r_dis_class', type=str, default="DCGANDiscriminator",help='DA discriminator class name to be used for reconstructed image')
     parser.add_argument('--r_dis_layers', type=int, default=3)
@@ -207,6 +208,10 @@ def main():
         # r_buffer_t = HistoricalBuffer(args.raw_buffer_size, t_img.shape[-1])
         updater_args["r_buffer_s"] = r_buffer_s
         # updater_args["r_buffer_t"] = r_buffer_t
+        if args.radv_batch_split:
+            updater_args["radv_batch_split"] = args.radv_batch_split
+        else:
+            updater_args["radv_batch_split"] = args.batchsize
 
     # Set up optimizers
     opts = {}

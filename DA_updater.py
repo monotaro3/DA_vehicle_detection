@@ -1095,6 +1095,7 @@ class Adv_updater(chainer.training.StandardUpdater):
         if self.raw_adv:
             self.r_dis = kwargs.pop('r_dis')
             self.r_buffer_s = kwargs.pop('r_buffer_s')
+            self.radv_batch_split = kwargs.pop('radv_batch_split')
             # self.r_buffer_t = kwargs.pop('r_buffer_t')
         self.adv_inv = kwargs.pop('adv_inv')
         self.dis, self.cls = models
@@ -1256,11 +1257,60 @@ class Adv_updater(chainer.training.StandardUpdater):
                 loss_dis_r = loss_dis_src_r + loss_dis_tgt_r
                 loss_dis_r.backward()
                 r_dis_optimizer.update()
+                loss_dis_r.unchain_backward()
                 loss_dis_r = loss_dis_r.data
                 loss_dis_src_r = loss_dis_src_r.data
                 loss_dis_tgt_r = loss_dis_tgt_r.data
 
                 loss_rec_fool_sum = 0
+
+                if self.raw_adv == 1:
+                    self.cls.cleargrads()
+                    self.reconstructor.cleargrads()
+                    if self.generator:
+                        self.generator.cleargrads()
+
+                    for b_num in range(-(-len(batch_source_array[0]) // self.radv_batch_split)):
+                        batch_split = batch_source_array[0][
+                                      self.radv_batch_split * b_num:self.radv_batch_split * (b_num + 1)]
+                        # batch_split_loc = batch_source_array[1][
+                        #                   self.radv_batch_split * b_num:self.radv_batch_split * (b_num + 1)]
+                        # batch_split_label = batch_source_array[2][
+                        #                     self.radv_batch_split * b_num:self.radv_batch_split * (b_num + 1)]
+                        split_coef = len(batch_split) / len(batch_source_array[0])
+                        s_data = Variable(batch_split)
+
+                        src_fmap = self.t_enc(s_data)
+                        for i in range(len(src_fmap) - 1):
+                            s_map = src_fmap.pop()
+                            s_map.unchain_backward()
+                            del s_map
+                        if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
+                            src_fmap[0] = F.tanh(src_fmap[0])
+                        if self.generator:
+                            if self.generator.__class__.__name__.find("DCGAN") > -1:
+                                s_data_ = s_data + Variable(xp.array(self.cls.mean).astype(self.use_dtype))
+                                s_data_ = self._normalize(s_data_)
+                            else:
+                                s_data_ = s_data
+                            if self.gen_type.find("inject") > -1:
+                                src_fmap[0] += self.generator(s_data_)
+                            image_rec = self.reconstructor(src_fmap[0])
+                        # if self.generator:
+                            if self.gen_type == "separate":
+                                image_rec += self.reconstructor(self.generator(s_data_))
+                        else:
+                            image_rec = self.reconstructor(src_fmap[0])
+                        loss_rec_fool = self.loss_func_adv_gen(self.r_dis(image_rec))
+                        loss_rec_fool *= split_coef
+                        loss_rec_fool.backward()
+                        loss_rec_fool_sum += loss_rec_fool.data
+                        loss_rec_fool.unchain_backward()
+                        del loss_rec_fool
+                    cls_optimizer.update()
+                    rec_optimizer.update()
+                    if self.generator:
+                        gen_optimizer.update()
 
         batch_source = self.get_iterator('main').next()
         # if self.iteration == 0:
@@ -1446,7 +1496,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                             image_rec += self.reconstructor(self.generator(s_data_))
                     else:
                         image_rec = self.reconstructor(src_fmap[0])
-                    if self.raw_adv:
+                    if self.raw_adv == 2:
                         loss_rec_fool = self.loss_func_adv_gen(self.r_dis(image_rec))
                         loss_rec_fool *= split_coef
                         loss_rec_fool.backward()
@@ -1464,7 +1514,7 @@ class Adv_updater(chainer.training.StandardUpdater):
                     cls_loss_.unchain_backward()
                     loss_sem_sum += cls_loss_.data
                     del cls_loss_
-                    if self.raw_adv:
+                    if self.raw_adv == 2:
                         loss_rec_fool.unchain_backward()
                         del loss_rec_fool
             rec_optimizer.update()
