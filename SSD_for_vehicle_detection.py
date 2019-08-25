@@ -681,7 +681,7 @@ class Joint_DCGAN(Chain):
         with self.init_scope():
             self.conv = L.Convolution2D(512, 3, pad=1)
     def __call__(self, x):
-        h = self.conv(x)
+        h = F.leaky_relu(self.conv(x))
         return F.tanh(h)
 
 class Recontructor_VGG_DCGAN(Chain):
