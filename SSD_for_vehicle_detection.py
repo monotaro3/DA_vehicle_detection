@@ -675,6 +675,15 @@ class Recontructor(Chain):
         h = self.conv0(h)
         return h
 
+class Joint_DCGAN(Chain):
+    def __init__(self):
+        super(Joint_DCGAN, self).__init__()
+        with self.init_scope():
+            self.conv = L.Convolution2D(512, 3, pad=1)
+    def __call__(self, x):
+        h = self.conv(x)
+        return F.tanh(h)
+
 class Recontructor_VGG_DCGAN(Chain):
     def __init__(self,upsample="deconv",norm="bn",activation="l_relu",pad="reflect"):
         #w = chainer.initializers.Normal(wscale)
