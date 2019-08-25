@@ -1080,6 +1080,8 @@ class Adv_updater(chainer.training.StandardUpdater):
             self.semantic = kwargs.pop('semantic')
             self.sem_weight = kwargs.pop('sem_weight')
             self.sem_batch_split = kwargs.pop('sem_batch_split')
+            self.no_sem_features = kwargs.pop('no_sem_features')
+            self.rec_joint = kwargs.pop('rec_joint')
             self.s_img = kwargs.pop('s_img')
             self.t_img = kwargs.pop('t_img')
             self.t_rec_learn = kwargs.pop('t_rec_learn')
@@ -1160,6 +1162,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                 gen_optimizer = self.get_optimizer('opt_gen')
             # if self.iteration == 0:
             #     print("reconstructor active") #debug code
+            if self.rec_joint:
+                joint_optimizer = self.get_optimizer('opt_joint')
         if self.raw_adv:
             r_dis_optimizer = self.get_optimizer('opt_r_dis')
         xp = self.cls.xp
@@ -1236,7 +1240,10 @@ class Adv_updater(chainer.training.StandardUpdater):
                 self.r_dis.cleargrads()
                 with chainer.no_backprop_mode():
                     if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                        src_fmap[0] = F.tanh(src_fmap[0])
+                        if self.rec_joint:
+                            src_fmap[0] = self.rec_joint(src_fmap[0])
+                        else:
+                            src_fmap[0] = F.tanh(src_fmap[0])
                     if self.generator:
                         if self.gen_type.find("inject") > -1:
                             if self.generator.__class__.__name__.find("DCGAN") > -1:
@@ -1269,7 +1276,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                     self.reconstructor.cleargrads()
                     if self.generator:
                         self.generator.cleargrads()
-
+                    if self.rec_joint:
+                        self.rec_joint.cleargrads()
                     for b_num in range(-(-len(batch_source_array[0]) // self.radv_batch_split)):
                         batch_split = batch_source_array[0][
                                       self.radv_batch_split * b_num:self.radv_batch_split * (b_num + 1)]
@@ -1286,7 +1294,10 @@ class Adv_updater(chainer.training.StandardUpdater):
                             s_map.unchain_backward()
                             del s_map
                         if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                            src_fmap[0] = F.tanh(src_fmap[0])
+                            if self.rec_joint:
+                                src_fmap[0] = self.rec_joint(src_fmap[0])
+                            else:
+                                src_fmap[0] = F.tanh(src_fmap[0])
                         if self.generator:
                             if self.generator.__class__.__name__.find("DCGAN") > -1:
                                 s_data_ = s_data + Variable(xp.array(self.cls.mean).astype(self.use_dtype))
@@ -1311,6 +1322,8 @@ class Adv_updater(chainer.training.StandardUpdater):
                     rec_optimizer.update()
                     if self.generator:
                         gen_optimizer.update()
+                    if self.rec_joint:
+                        joint_optimizer.update()
 
         batch_source = self.get_iterator('main').next()
         # if self.iteration == 0:
@@ -1396,9 +1409,11 @@ class Adv_updater(chainer.training.StandardUpdater):
                     rec_temp = self.reconstructor.__class__(self.reconstructor["upsample"]).to_gpu()
                     rec_temp.copyparams(self.reconstructor)
                     rec_temp.cleargrads()
+            if self.rec_joint:
+                self.rec_joint.cleargrads()
             # self.rec_batch_split = 16
             # loss_weight = 0.1
-            if self.t_rec_learn:
+            if self.t_rec_learn and not(self.no_sem_features):
                 for b_num in range(-(-len(batch_target)//self.rec_batch_split)):
                     batch_split = batch_target[self.rec_batch_split*b_num:self.rec_batch_split*(b_num+1)]
                     if type(batch_target[0]) == tuple:
@@ -1415,8 +1430,11 @@ class Adv_updater(chainer.training.StandardUpdater):
                     # if self.generator:
                     #     tgt_fmap[0] += self.generator(t_data)
                     if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                        tgt_fmap[0] = F.tanh(tgt_fmap[0])
-                    image_rec = self.reconstructor(tgt_fmap[0])
+                        if self.rec_joint:
+                            tgt_fmap[0] = self.rec_joint(tgt_fmap[0])
+                        else:
+                            tgt_fmap[0] = F.tanh(tgt_fmap[0])
+                    image_rec_t = self.reconstructor(tgt_fmap[0])
                     # if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
                     #     image_rec = self._denormalize(image_rec)
                     #     image_rec -= Variable(xp.array(self.cls.mean))
@@ -1425,31 +1443,31 @@ class Adv_updater(chainer.training.StandardUpdater):
                         img_org += Variable(xp.array(self.cls.mean).astype(self.use_dtype))
                         img_org = self._normalize(img_org)
                     if self.rec_loss_func == "L1":
-                        loss_rec = F.mean_absolute_error(image_rec, img_org)
+                        loss_rec = F.mean_absolute_error(image_rec_t, img_org)
                     elif self.rec_loss_func == "L2":
-                        loss_rec = F.mean_squared_error(image_rec, img_org)
+                        loss_rec = F.mean_squared_error(image_rec_t, img_org)
                     loss_rec *= split_coef * self.rec_weight
                     loss_rec.backward()
                     if self.generator and self.t_gen_learn:
                         if self.gen_type == "separate":
-                            image_rec.unchain_backward()
+                            image_rec_t.unchain_backward()
                             tgt_delta = self.generator(t_data)
                             image_rec_delta = self.reconstructor(tgt_delta)
-                            loss_rec_aug = F.mean_absolute_error(image_rec+image_rec_delta, img_org)
+                            loss_rec_aug = F.mean_absolute_error(image_rec_t+image_rec_delta, img_org)
                             loss_rec_aug *= split_coef * self.rec_weight
                             loss_rec_aug.backward()
                         elif self.gen_type == "inject_freeze":
-                            image_rec.unchain_backward()
+                            image_rec_t.unchain_backward()
                             tgt_fmap[0] += self.generator(t_data)
-                            image_rec = rec_temp(tgt_fmap[0])
-                            loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
+                            image_rec_t = rec_temp(tgt_fmap[0])
+                            loss_rec_aug = F.mean_absolute_error(image_rec_t, img_org)
                             loss_rec_aug *= split_coef * self.rec_weight
                             loss_rec_aug.backward()
                         elif self.gen_type == "inject":
                             # image_rec.unchain_backward()
                             tgt_fmap[0] += self.generator(t_data)
-                            image_rec = self.reconstructor(tgt_fmap[0])
-                            loss_rec_aug = F.mean_absolute_error(image_rec, img_org)
+                            image_rec_t = self.reconstructor(tgt_fmap[0])
+                            loss_rec_aug = F.mean_absolute_error(image_rec_t, img_org)
                             loss_rec_aug *= split_coef * self.rec_weight
                             loss_rec_aug.backward()
                     loss_rec.unchain_backward()
@@ -1471,40 +1489,53 @@ class Adv_updater(chainer.training.StandardUpdater):
                                       self.sem_batch_split * b_num:self.sem_batch_split * (b_num + 1)]
                     split_coef = len(batch_split) / len(batch_source_array[0])
                     s_data = Variable(batch_split)  # / 255
-                    if self.semantic == "small":
-                        with chainer.no_backprop_mode():
-                            src_fmap = self.t_enc(s_data)
-                    else:
-                        src_fmap = self.t_enc(s_data)
-                    for i in range(len(src_fmap) - 1):
-                        s_map = src_fmap.pop()
-                        s_map.unchain_backward()
-                        del s_map
-                    if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                        src_fmap[0] = F.tanh(src_fmap[0])
-                    if self.generator:
+                    if self.no_sem_features:
                         if self.generator.__class__.__name__.find("DCGAN") > -1:
                             s_data_ = s_data + Variable(xp.array(self.cls.mean).astype(self.use_dtype))
                             s_data_ = self._normalize(s_data_)
                         else:
                             s_data_ = s_data
-                        if self.gen_type.find("inject") > -1:
-                            src_fmap[0] += self.generator(s_data_)
-                        image_rec = self.reconstructor(src_fmap[0])
-                    # if self.generator:
-                        if self.gen_type == "separate":
-                            image_rec += self.reconstructor(self.generator(s_data_))
+                        src_fmap = []
+                        src_fmap.append(self.generator(s_data_))
+                        image_rec_s = self.reconstructor(src_fmap[0])
                     else:
-                        image_rec = self.reconstructor(src_fmap[0])
+                        if self.semantic == "small":
+                            with chainer.no_backprop_mode():
+                                src_fmap = self.t_enc(s_data)
+                        else:
+                            src_fmap = self.t_enc(s_data)
+                        for i in range(len(src_fmap) - 1):
+                            s_map = src_fmap.pop()
+                            s_map.unchain_backward()
+                            del s_map
+                        if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
+                            if self.rec_joint:
+                                src_fmap[0] = self.rec_joint(src_fmap[0])
+                            else:
+                                src_fmap[0] = F.tanh(src_fmap[0])
+                        if self.generator:
+                            if self.generator.__class__.__name__.find("DCGAN") > -1:
+                                s_data_ = s_data + Variable(xp.array(self.cls.mean).astype(self.use_dtype))
+                                s_data_ = self._normalize(s_data_)
+                            else:
+                                s_data_ = s_data
+                            if self.gen_type.find("inject") > -1:
+                                src_fmap[0] += self.generator(s_data_)
+                            image_rec_s = self.reconstructor(src_fmap[0])
+                        # if self.generator:
+                            if self.gen_type == "separate":
+                                image_rec_s += self.reconstructor(self.generator(s_data_))
+                        else:
+                            image_rec_s = self.reconstructor(src_fmap[0])
                     if self.raw_adv == 2:
-                        loss_rec_fool = self.loss_func_adv_gen(self.r_dis(image_rec))
+                        loss_rec_fool = self.loss_func_adv_gen(self.r_dis(image_rec_s))
                         loss_rec_fool *= split_coef
                         loss_rec_fool.backward()
                         loss_rec_fool_sum += loss_rec_fool.data
                     if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                        image_rec = self._denormalize(image_rec)
-                        image_rec -= Variable(xp.array(self.cls.mean).astype(self.use_dtype))
-                    src_fmap_ = self.t_enc(image_rec)
+                        image_rec_s = self._denormalize(image_rec_s)
+                        image_rec_s -= Variable(xp.array(self.cls.mean).astype(self.use_dtype))
+                    src_fmap_ = self.t_enc(image_rec_s)
                     mb_locs, mb_confs = self.cls.multibox(src_fmap_)
                     loc_loss, conf_loss = multibox_loss(
                         mb_locs, mb_confs, batch_split_loc, batch_split_label, self.k)
@@ -1520,6 +1551,8 @@ class Adv_updater(chainer.training.StandardUpdater):
             rec_optimizer.update()
             if self.generator:
                 gen_optimizer.update()
+            if self.rec_joint:
+                joint_optimizer.update()
             if self.semantic != "small":
                 cls_optimizer.update()
             # loss_rec = loss_rec.data
@@ -1563,7 +1596,10 @@ class Adv_updater(chainer.training.StandardUpdater):
                 with chainer.no_backprop_mode():
                     s_fmap = self.t_enc(Variable(xp.array([s_original])))
                     if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                        s_fmap[0] = F.tanh(s_fmap[0])
+                        if self.rec_joint:
+                            s_fmap[0] = self.rec_joint(s_fmap[0])
+                        else:
+                            s_fmap[0] = F.tanh(s_fmap[0])
                         s_img_rec = self._denormalize(chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data))[0]
                     else:
                         s_img_rec = (chainer.backends.cuda.to_cpu(self.reconstructor(s_fmap[0]).data) + self.cls.mean)[0]
@@ -1588,7 +1624,10 @@ class Adv_updater(chainer.training.StandardUpdater):
                     if self.t_rec_learn:
                         t_fmap = self.t_enc(Variable(xp.array([t_original])))
                         if self.reconstructor.__class__.__name__.find("DCGAN") > -1:
-                            t_fmap[0] = F.tanh(t_fmap[0])
+                            if self.rec_joint:
+                                t_fmap[0] = self.rec_joint(t_fmap[0])
+                            else:
+                                t_fmap[0] = F.tanh(t_fmap[0])
                             t_img_rec = self._denormalize(chainer.backends.cuda.to_cpu(self.reconstructor(t_fmap[0]).data))[0]
                         else:
                             t_img_rec = \

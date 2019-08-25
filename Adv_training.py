@@ -64,6 +64,9 @@ def main():
                         help='use of semantic loss with reconstructor')
     parser.add_argument('--sem_weight', type=float, default=1.)
     parser.add_argument('--sem_batch_split', type=int, default=12)
+    parser.add_argument('--no_sem_features', action="store_true", help='not to use detection features for image generation')
+    parser.add_argument('--rec_joint', action="store_true",
+                        help='insert joint conv layer before feeding reconstructor')
     parser.add_argument('--t_no_aug', action="store_true", help='not perform augmentation to target images')
     parser.add_argument('--rec_aug', action="store_true", help='reconstruct augmented image, not original one')
     parser.add_argument('--generator', type=str, help='class name of generator')
@@ -185,11 +188,17 @@ def main():
         updater_args["semantic"] = args.semantic
         updater_args["sem_weight"] = args.sem_weight
         updater_args["sem_batch_split"] = args.sem_batch_split
+        updater_args["no_sem_features"] = args.no_sem_features
         s_img = COWC_dataset_processed(split="train", datadir=args.source_dataset)[0][0] #- ssd_model.mean
         t_img = target_dataset_[0] #- ssd_model.mean
         updater_args["s_img"] = s_img
         updater_args["t_img"] = t_img
         updater_args["t_rec_learn"] = not(args.disable_t_rec)
+        if args.rec_joint:
+            joint = Joint_DCGAN()
+            updater_args["rec_joint"] = joint
+        else:
+            updater_args["rec_joint"] = None
     if args.generator:
         generator = eval(args.generator)()
         if args.gen_file:
@@ -224,6 +233,8 @@ def main():
             opts["opt_gen"] = make_optimizer(generator, args.adam_alpha, args.adam_beta1, args.adam_beta2)
     if args.raw_adv:
         opts["opt_r_dis"] = make_optimizer(r_dis, args.adam_alpha, args.adam_beta1, args.adam_beta2)
+    if args.rec_joint:
+        opts["opt_joint"] = make_optimizer(joint, args.adam_alpha, args.adam_beta1, args.adam_beta2)
 
     updater_args["optimizer"] = opts
     updater_args["models"] = models
