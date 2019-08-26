@@ -79,8 +79,10 @@ def main():
     parser.add_argument('--raw_adv', type=int, choices=[1,2], help="1: alternative update, 2: simultaneous update")
     parser.add_argument('--radv_batch_split', type=int, help="split batch size for raw_adv alternate training")
     parser.add_argument('--raw_buffer_size', type=int,default=128)
+    parser.add_argument('--r_buf_file', type=str)
     parser.add_argument('--r_dis_class', type=str, default="DCGANDiscriminator",help='DA discriminator class name to be used for reconstructed image')
     parser.add_argument('--r_dis_layers', type=int, default=3)
+    parser.add_argument('--r_dis_file', type=str)
     parser.add_argument('--source_dataset', type=str, default= "E:/work/vehicle_detection_dataset/cowc_300px_0.3_fmap" , help='source dataset directory')
     # parser.add_argument('--fixed_source_dataset', type=str, help='source fmap dataset directory')
     parser.add_argument('--target_dataset', type=str, default= "E:/work/vehicle_detection_dataset/Khartoum_adda" , help='target dataset directory')
@@ -117,7 +119,7 @@ def main():
     ssd_model = initSSD("ssd300",0.3,args.ssdpath)
     models = [discriminator, ssd_model]
     if args.reconstructor:
-        from SSD_for_vehicle_detection import Recontructor
+        # from SSD_for_vehicle_detection import Recontructor
         reconstructor = eval(args.rec_class)(args.reconstructor)
         if args.rec_file:
             serializers.load_npz(args.rec_file, reconstructor)
@@ -212,8 +214,12 @@ def main():
     updater_args["raw_adv"] = args.raw_adv
     if args.raw_adv:
         r_dis = DCGANDiscriminator(down_layers=args.r_dis_layers)
+        if args.r_dis_file:
+            serializers.load_npz(args.r_dis_file, r_dis)
         updater_args["r_dis"] = r_dis
         r_buffer_s = HistoricalBuffer(args.raw_buffer_size, s_img.shape[-1])
+        if args.r_buf_file:
+            serializers.load_npz(args.r_buf_file, r_buffer_s)
         # r_buffer_t = HistoricalBuffer(args.raw_buffer_size, t_img.shape[-1])
         updater_args["r_buffer_s"] = r_buffer_s
         # updater_args["r_buffer_t"] = r_buffer_t
@@ -290,6 +296,8 @@ def main():
     # serializers.save_npz(os.path.join(args.out, "ssdmodel_iter_12000"), trainer.updater._optimizers["opt_cls"].target)
     # serializers.save_npz(os.path.join(args.out, "reconstructor_iter_12000"),
     #                      trainer.updater._optimizers["opt_rec"].target)
+    # serializers.save_npz(os.path.join(args.out, "r_buf_iter_8000"),
+    #                                          trainer.updater.r_buffer_s)
 
     # Run the training
     trainer.run()

@@ -1069,8 +1069,8 @@ class Adv_updater_(chainer.training.StandardUpdater):
 class Adv_updater(chainer.training.StandardUpdater):
     def __init__(self, *args, **kwargs):
         models = kwargs.pop('models')
-        from SSD_for_vehicle_detection import Recontructor
-        if models[-1].__class__.__name__.find("Recontructor") > -1:
+        # from SSD_for_vehicle_detection import Recontructor
+        if models[-1].__class__.__name__.find("Reconstructor") > -1:
             self.reconstructor = models.pop()
             self.rec_weight = kwargs.pop('rec_weight')
             self.rec_batch_split = kwargs.pop('rec_batch_split')

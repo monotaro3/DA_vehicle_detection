@@ -614,11 +614,11 @@ class DA4_discriminator_bn(Chain):
         h = F.leaky_relu(self.conv4(h))
         return h
 
-class Recontructor(Chain):
+class Reconstructor(Chain):
     def __init__(self,upsample="deconv"):
         #w = chainer.initializers.Normal(wscale)
         self.upsample = upsample
-        super(Recontructor, self).__init__()
+        super(Reconstructor, self).__init__()
         with self.init_scope():
             self.conv4_3 = L.Convolution2D(512,3,pad=1)
             self.conv4_2 = L.Convolution2D(512, 3, pad=1)
@@ -679,12 +679,14 @@ class Joint_DCGAN(Chain):
     def __init__(self):
         super(Joint_DCGAN, self).__init__()
         with self.init_scope():
-            self.conv = L.Convolution2D(512, 3, pad=1)
+            self.conv1 = L.Convolution2D(512, 3, pad=1)
+            self.conv2 = L.Convolution2D(512, 3, pad=1)
     def __call__(self, x):
-        h = F.leaky_relu(self.conv(x))
+        h = F.leaky_relu(self.conv1(x))
+        h = self.conv2(h)
         return F.tanh(h)
 
-class Recontructor_VGG_DCGAN(Chain):
+class Reconstructor_VGG_DCGAN(Chain):
     def __init__(self,upsample="deconv",norm="bn",activation="l_relu",pad="reflect"):
         #w = chainer.initializers.Normal(wscale)
         self.upsample = upsample
@@ -693,7 +695,7 @@ class Recontructor_VGG_DCGAN(Chain):
         self.activation_option = {"relu":F.relu,"l_relu":F.leaky_relu}
         self.activation = activation
         self.pad = pad
-        super(Recontructor_VGG_DCGAN, self).__init__()
+        super(Reconstructor_VGG_DCGAN, self).__init__()
         with self.init_scope():
             self.conv4_3 = L.Convolution2D(512,3,pad=1)
             self.norm4_3 = norm_option[norm](512)
